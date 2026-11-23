@@ -1,9 +1,9 @@
 # Mac and Linux packages (the Windows exe + MSI still come from build.js and installer\build-msi.ps1).
-#   npx electron-builder@26.18.0 --mac   -> dist/Winampify-<version>-arm64.dmg and -x64.dmg (run on a Mac)
-#   npx electron-builder@26.18.0 --linux -> dist/Winampify-<version>.AppImage and winampify_<version>_amd64.deb
+#   npx electron-builder@26.18.0 --mac   -> dist/Soranix-<version>-arm64.dmg and -x64.dmg (run on a Mac)
+#   npx electron-builder@26.18.0 --linux -> dist/Soranix-<version>.AppImage and soranix_<version>_amd64.deb
 # GitHub Actions does both: .github/workflows/build-mac-linux.yml
-appId: com.winampify.app
-productName: Winampify
+appId: com.soranix.app
+productName: Soranix
 copyright: ""
 
 # castLabs Electron (with Widevine, so Spotify can play), same version as package.json
@@ -43,20 +43,20 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
   extendInfo:
-    NSAudioCaptureUsageDescription: Winampify's MilkDrop visualizer listens to the music your Mac is playing.
-    NSScreenCaptureUsageDescription: Winampify's MilkDrop visualizer captures your Mac's sound (no picture is kept).
+    NSAudioCaptureUsageDescription: Soranix's MilkDrop visualizer listens to the music your Mac is playing.
+    NSScreenCaptureUsageDescription: Soranix's MilkDrop visualizer captures your Mac's sound (no picture is kept).
 
 dmg:
-  artifactName: Winampify-${version}-${arch}.dmg
+  artifactName: Soranix-${version}-${arch}.dmg
 
 linux:
   icon: icons/icon-512.png
   category: AudioVideo
-  executableName: winampify
+  executableName: soranix
   # the see-through, click-through windows need X11 (XWayland on Wayland desktops)
   executableArgs: ["--ozone-platform=x11"]
   synopsis: Classic-style desktop player for your Spotify account
-  maintainer: Winampify
+  maintainer: Soranix
   target:
     - target: AppImage
       arch: [x64]
@@ -64,7 +64,7 @@ linux:
       arch: [x64]
 
 appImage:
-  artifactName: Winampify-${version}-x86_64.AppImage
+  artifactName: Soranix-${version}-x86_64.AppImage
 
 deb:
   packageCategory: sound

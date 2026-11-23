@@ -20,13 +20,13 @@ jobs:
           - os: macos-latest
             target: --mac
             files: dist/*.dmg
-            name: Winampify-macOS
+            name: Soranix-macOS
           - os: ubuntu-latest
             target: --linux
             files: |
               dist/*.AppImage
               dist/*.deb
-            name: Winampify-Linux
+            name: Soranix-Linux
     runs-on: ${{ matrix.os }}
     env:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
@@ -65,16 +65,16 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
-            BIN="dist/mac-arm64/Winampify.app/Contents/MacOS/Winampify"; RUN=""
+            BIN="dist/mac-arm64/Soranix.app/Contents/MacOS/Soranix"; RUN=""
           else
-            BIN="dist/linux-unpacked/winampify"; RUN="xvfb-run -a"
+            BIN="dist/linux-unpacked/soranix"; RUN="xvfb-run -a"
             ARGS="--no-sandbox --ozone-platform=x11"
           fi
           $RUN "$BIN" $ARGS > run.log 2>&1 &
           sleep 25
-          if pgrep -f "$BIN" > /dev/null; then echo "Winampify is running"; ALIVE=1; else echo "::error::Winampify exited early"; ALIVE=0; fi
+          if pgrep -f "$BIN" > /dev/null; then echo "Soranix is running"; ALIVE=1; else echo "::error::Soranix exited early"; ALIVE=0; fi
           echo "----- app output"; cat run.log
-          for f in ~/.config/Winampify/winampify.log ~/.config/winampify/winampify.log "$HOME/Library/Application Support/Winampify/winampify.log" "$HOME/Library/Application Support/winampify/winampify.log"; do
+          for f in ~/.config/Soranix/soranix.log ~/.config/soranix/soranix.log "$HOME/Library/Application Support/Soranix/soranix.log" "$HOME/Library/Application Support/soranix/soranix.log"; do
             [ -f "$f" ] && { echo "----- page log: $f"; cat "$f"; }
           done
           pkill -f "$BIN" || true
@@ -134,6 +134,6 @@ jobs:
               gh release upload "v$V-mac-linux" out/* --clobber
             else
               gh release create "v$V-mac-linux" out/* --target "$GITHUB_SHA" --prerelease \
-                --title "Winampify $V for Mac & Linux (test build)" --notes-file notes.md
+                --title "Soranix $V for Mac & Linux (test build)" --notes-file notes.md
             fi
           fi

@@ -1,5 +1,5 @@
-// Winampify balance helper.
-// Sets the left/right volume of Winampify's own sound in Windows (per-app channel volume, the
+// Soranix balance helper.
+// Sets the left/right volume of Soranix's own sound in Windows (per-app channel volume, the
 // same thing the Windows volume mixer controls), so the balance slider really pans the music.
 // Reads lines like "pan -40" from stdin (-100 = full left, 0 = centre, 100 = full right) and
 // re-applies the current value every second, because Windows creates the app's sound session
@@ -78,7 +78,7 @@ static class Balance {
 
   [STAThread]
   static void Main(string[] args) {
-    procName = args.Length > 0 ? args[0] : "Winampify";
+    procName = args.Length > 0 ? args[0] : "Soranix";
     var reader = new Thread(() => {
       string line;
       while ((line = Console.ReadLine()) != null) {
@@ -86,7 +86,7 @@ static class Balance {
         int v;
         if (parts.Length == 2 && parts[0] == "pan" && int.TryParse(parts[1], out v)) pan = Math.Max(-100, Math.Min(100, v));
       }
-      Environment.Exit(0); // Winampify closed
+      Environment.Exit(0); // Soranix closed
     });
     reader.IsBackground = true; reader.Start();
     int last = int.MinValue; var timer = Stopwatch.StartNew();

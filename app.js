@@ -1,5 +1,5 @@
 'use strict';
-/* Winampify — a classic-style desktop player for your Spotify account.
+/* Soranix — a classic-style desktop player for your Spotify account.
    Auth: Authorization Code + PKCE (no server secret). Audio: Spotify Web Playback SDK. */
 
 if (location.hostname === 'localhost') location.replace(location.href.replace('//localhost', '//127.0.0.1'));
@@ -54,7 +54,7 @@ async function login() {
     code_challenge_method: 'S256', code_challenge: challenge, state,
   });
   // desktop app: Spotify's login opens in a small pop-up window; when you're done it closes and
-  // Winampify finishes connecting. In a browser the page itself goes to Spotify and comes back.
+  // Soranix finishes connecting. In a browser the page itself goes to Spotify and comes back.
   if (window.desktop?.openLogin) { showMsg('LOG IN TO SPOTIFY IN THE POP-UP WINDOW', 4000); window.desktop.openLogin(url); }
   else location.href = url;
 }
@@ -104,7 +104,7 @@ const REQ = { active: 0, last: 0, pauseUntil: 0, keyPause: LS.get('reqPause', {}
    (Spotify's quotas are per kind, so one pause covers every artist) */
 const reqKey = path => String(path).replace(API, '').split('?')[0].replace(/\/[0-9A-Za-z]{22}(?=\/|$)/g, '/x');
 /* Safe limits: Spotify blocks some kinds of request for an hour or more once an app asks too
-   often. Winampify counts those kinds and, past a safe number per half hour, uses another way
+   often. Soranix counts those kinds and, past a safe number per half hour, uses another way
    (Search) before Spotify ever has to block. The counts survive restarts. */
 const BUDGET = { '/artists/x/albums': 20, '/artists/x': 30, '/me/playlists': 6, '/playlists/x/items': 60 };
 REQ.hist = LS.get('reqHist', {});
@@ -195,9 +195,9 @@ function loadSDK() {
 }
 function initPlayer() {
   if (S.player) return;
-  const p = new Spotify.Player({ name: 'Winampify', getOAuthToken: cb => getToken().then(cb).catch(() => {}), volume: S.vol / 100 });
+  const p = new Spotify.Player({ name: 'Soranix', getOAuthToken: cb => getToken().then(cb).catch(() => {}), volume: S.vol / 100 });
   S.player = p;
-  p.addListener('ready', ({ device_id }) => { S.deviceId = device_id; showMsg('WINAMPIFY READY - PRESS PLAY', 2500); });
+  p.addListener('ready', ({ device_id }) => { S.deviceId = device_id; showMsg('SORANIX READY - PRESS PLAY', 2500); });
   p.addListener('not_ready', () => { S.deviceId = null; showMsg('PLAYER WENT OFFLINE', 2500); });
   p.addListener('initialization_error', ({ message }) => playerError('This browser cannot play Spotify audio (' + message + '). Use Chrome, Edge or Firefox.'));
   p.addListener('authentication_error', ({ message }) => playerError('Spotify rejected the login: ' + message));
@@ -384,7 +384,7 @@ function setVol(v, quiet, fromRemote) {
    a few times a second and move the slider to match. */
 setInterval(() => {
   // only while a song is loaded on this player: before that, the player reports 0 and that
-  // would wrongly mute Winampify
+  // would wrongly mute Soranix
   if (!S.player || !S.deviceId || !S.track || Date.now() - (S.volSetAt || 0) < 1000) return;
   S.player.getVolume().then(v => {
     if (typeof v !== 'number' || Date.now() - (S.volSetAt || 0) < 1000) return;
@@ -394,7 +394,7 @@ setInterval(() => {
 }, 300);
 function setBal(b) {
   LS.set('bal', b);
-  window.desktop?.setBalance?.(b); // pans Winampify's sound in Windows
+  window.desktop?.setBalance?.(b); // pans Soranix's sound in Windows
   placeH($('#bal'), (b + 100) / 200);
   $('#bal').style.setProperty('--h', Math.round(120 - Math.abs(b) * 1.2));
 }
@@ -413,7 +413,7 @@ function renderStatus() {
     const idx = S.pl.findIndex(x => x.uri === S.track.uri || x.id === S.track.id);
     S.marqBase = `${idx >= 0 ? idx + 1 + '. ' : ''}${S.track.artists.map(a => a.name).join(', ')} - ${S.track.name} (${fmt(S.dur)})`;
   } else {
-    S.marqBase = S.me ? 'WINAMPIFY - PRESS EJECT OR PL TO PICK SOMETHING' : 'WINAMPIFY - CONNECT YOUR SPOTIFY ACCOUNT IN THE LIBRARY WINDOW';
+    S.marqBase = S.me ? 'SORANIX - PRESS EJECT OR PL TO PICK SOMETHING' : 'SORANIX - CONNECT YOUR SPOTIFY ACCOUNT IN THE LIBRARY WINDOW';
   }
 }
 
@@ -662,12 +662,12 @@ async function onConnected() {
   const cachedAt = LS.get('playlistsCacheAt', 0);
   try { if (!S.playlists.length || Date.now() - cachedAt > PL_REFRESH) await syncPlaylists(true); }
   catch (e) {
-    libStatus('Spotify is busy, showing your saved playlist list. Winampify will try again later.');
+    libStatus('Spotify is busy, showing your saved playlist list. Soranix will try again later.');
   }
   renderTree();
   if (!L.node) openNode('liked');
   // keep the playlist list in step with Spotify: changes made in the Spotify app (or on a
-  // phone) show up within half a minute, or as soon as you come back to Winampify
+  // phone) show up within half a minute, or as soon as you come back to Soranix
   // refresh the playlist list every 30 minutes (or press the refresh button in the library)
   // (skipped while you're away: nothing playing and no clicks or keys for 20 minutes;
   //  it catches up as soon as you're back)
@@ -707,7 +707,7 @@ function syncPlaylists(first = false, full = false) {
     LS.set('playlistsCacheAt', Date.now());
     if (first || sig(fresh) !== sig(S.playlists)) {
       const old = new Map(S.playlists.map(p => [p.id, p]));
-      // keep details only Winampify knows (like an edited description) for playlists that still exist
+      // keep details only Soranix knows (like an edited description) for playlists that still exist
       S.playlists = fresh.map(p => (old.has(p.id) ? Object.assign(old.get(p.id), p) : p));
       savePlaylistList();
       renderTree();
@@ -765,10 +765,10 @@ const mapShow = s => s && { type: 'show', uri: s.uri, id: s.id, name: s.name, ow
 const mapEpisode = (e, show) => e && e.uri ? { type: 'track', uri: e.uri, id: e.id, name: e.name, artist: show?.name || e.show?.name || '', album: e.release_date || '', dur: e.duration_ms, episode: true } : null;
 async function createPlaylist() {
   if (!S.me) return;
-  const name = await winPrompt('Name for the new playlist:', 'My Winampify playlist', { title: 'CREATE PLAYLIST', ok: 'Create' });
+  const name = await winPrompt('Name for the new playlist:', 'My Soranix playlist', { title: 'CREATE PLAYLIST', ok: 'Create' });
   if (!name) return;
   act('Create playlist', async () => {
-    const p = mapPlaylist(await api('/me/playlists', { method: 'POST', body: { name, public: false, description: 'Made with Winampify' } }));
+    const p = mapPlaylist(await api('/me/playlists', { method: 'POST', body: { name, public: false, description: 'Made with Soranix' } }));
     S.playlists.unshift(p); renderTree(); openPlaylist(p); showMsg('CREATED ' + name.toUpperCase(), 2000); setTimeout(() => syncPlaylists().catch(() => {}), 3000);
   });
 }
@@ -776,7 +776,7 @@ function filteredNodes() {
   const f = LIBX.filter;
   const list = (key, items, prefix) => {
     const e = LIBX.err[key];
-    if (e) return [[e.status === 403 ? 'reconnect' : 'retry:' + key, e.status === 403 ? 'Click to give Winampify permission' : 'Could not load (click to retry)']];
+    if (e) return [[e.status === 403 ? 'reconnect' : 'retry:' + key, e.status === 403 ? 'Click to give Soranix permission' : 'Could not load (click to retry)']];
     if (items == null) return [['none', 'Loading...']];
     if (!items.length) return [['none', 'Nothing saved yet']];
     return items.map(x => [prefix + x.id, x.name, 0]);
@@ -864,7 +864,7 @@ async function loadMore() {
 }
 
 async function openNode(id) {
-  if (id === 'logout') { if (await winConfirm('Log out of Spotify in Winampify?', { title: 'LOG OUT', ok: 'Log out' })) logout('Logged out.'); return; }
+  if (id === 'logout') { if (await winConfirm('Log out of Spotify in Soranix?', { title: 'LOG OUT', ok: 'Log out' })) logout('Logged out.'); return; }
   L.node = id; renderTree();
   if (id === 'search') {
     $('#q').focus();
@@ -1190,7 +1190,7 @@ function reportPlayer(dragging = false) {
   const R = Math.max(...rs.map(r => r.right)), B = Math.max(...rs.map(r => r.bottom));
   window.desktop.playerRect({ x: L, y: T, w: R - L, h: B - T, dragging });
 }
-/* Desktop app: tell the shell which parts of the screen Winampify actually covers (its visible
+/* Desktop app: tell the shell which parts of the screen Soranix actually covers (its visible
    windows, open menus, or everything while a dialog is up), so the see-through layer is shaped
    like the windows and screenshot tools / window pickers see what's behind everywhere else. */
 let lastShape = '';
@@ -1358,7 +1358,7 @@ function menuKey(e) {
 }
 
 /* ------------------------------------------------------------------ song actions (right-click) */
-const NEED_SCOPE = 'Winampify needs one more permission from Spotify for this. Reconnect now? (You will come right back.)';
+const NEED_SCOPE = 'Soranix needs one more permission from Spotify for this. Reconnect now? (You will come right back.)';
 async function act(label, fn) {
   try { await fn(); }
   catch (e) {
@@ -1392,10 +1392,10 @@ function addToPlaylist(tracks, p) {
 }
 async function newPlaylistWith(tracks) {
   const name = await winPrompt(`Name for the new playlist (${songs(tracks.length)} will be added):`,
-    tracks.length === 1 ? tracks[0].name + ' mix' : 'Winampify mix', { title: 'CREATE PLAYLIST', ok: 'Create' });
+    tracks.length === 1 ? tracks[0].name + ' mix' : 'Soranix mix', { title: 'CREATE PLAYLIST', ok: 'Create' });
   if (!name) return;
   return act('New playlist', async () => {
-    const p = mapPlaylist(await api('/me/playlists', { method: 'POST', body: { name, public: false, description: 'Made with Winampify' } }));
+    const p = mapPlaylist(await api('/me/playlists', { method: 'POST', body: { name, public: false, description: 'Made with Soranix' } }));
     S.playlists.unshift(p); savePlaylistList(); renderTree();
     await addToPlaylist(tracks, p);
   });
@@ -1482,14 +1482,14 @@ async function songMenu(e, tracks, src) {
       plAdd(tracks, true); playIndex(0);
     } },
     { label: 'Add to queue', key: 'Q', fn: () => addToQueue(tracks) },
-    src.from !== 'pl' && { label: 'Add to Winampify playlist', key: 'E', fn: () => { const n = plAdd(tracks, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO PLAYLIST`); } },
+    src.from !== 'pl' && { label: 'Add to Soranix playlist', key: 'E', fn: () => { const n = plAdd(tracks, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO PLAYLIST`); } },
     '-',
     { label: 'Add to playlist', key: 'P', sub: () => [
       { label: 'New playlist...', fn: () => newPlaylistWith(tracks) }, '-',
       ...mine.map(p => ({ label: p.name, fn: () => addToPlaylist(tracks, p) })),
     ] },
     ownPl && { label: 'Remove from this playlist', key: 'Del', fn: () => removeFromSpotifyPlaylist(tracks, ownPl) },
-    src.from === 'pl' && { label: 'Remove from Winampify playlist', key: 'Del', fn: plRemove },
+    src.from === 'pl' && { label: 'Remove from Soranix playlist', key: 'Del', fn: plRemove },
     likeItem,
     '-',
     { label: 'Sleep timer', key: 'T', sub: sleepMenu },
@@ -1518,7 +1518,7 @@ function containerMenu(e, r) {
   const items = [
     { label: 'Open', key: 'Enter', fn: () => activateRow(L.view.rows.indexOf(r)) },
     r.type !== 'artist' && { label: 'Play', fn: () => { L.sel = new Set([L.view.rows.indexOf(r)]); libSend(true); } },
-    r.type !== 'artist' && { label: 'Add to Winampify playlist', key: 'E', fn: () => { L.sel = new Set([L.view.rows.indexOf(r)]); libSend(false); } },
+    r.type !== 'artist' && { label: 'Add to Soranix playlist', key: 'E', fn: () => { L.sel = new Set([L.view.rows.indexOf(r)]); libSend(false); } },
     '-',
     { label: 'Share', key: 'S', sub: [
       { label: 'Copy link', fn: () => copyText(`https://open.spotify.com/${r.type}/${r.id}`, 'LINK') },
@@ -1576,7 +1576,7 @@ function mainMenu(e) {
     '-',
     ['Time: elapsed / remaining', () => { S.remaining = !S.remaining; LS.set('remaining', S.remaining); }],
     ['Log out of Spotify', () => openNode('logout')],
-    ['About Winampify', showAbout],
+    ['About Soranix', showAbout],
   ]);
 }
 
@@ -1941,7 +1941,7 @@ function playlistMenu(e, p) {
       const t = await playlistTracks(p); if (t.length) { plAdd(t, true); playIndex(0); }
     } },
     { label: 'Add to queue', key: 'Q', disabled: !canList, fn: async () => { const t = await playlistTracks(p); if (t.length) addToQueue(t); } },
-    { label: 'Add to Winampify playlist', key: 'E', disabled: !canList, fn: async () => { const t = await playlistTracks(p); const n = plAdd(t, false); showMsg(`ADDED ${songs(n).toUpperCase()}`); } },
+    { label: 'Add to Soranix playlist', key: 'E', disabled: !canList, fn: async () => { const t = await playlistTracks(p); const n = plAdd(t, false); showMsg(`ADDED ${songs(n).toUpperCase()}`); } },
     '-',
     mine && { label: 'Edit details', fn: () => editPlaylist(p) },
     inLib
@@ -1978,7 +1978,7 @@ function setupPlaylistMenus() {
 
 /* ------------------------------------------------------------------ in-app dialogs (instead of browser pop-ups)
    winDialog resolves true/false for a question, or the list of field values (null if cancelled). */
-function winDialog({ title = 'WINAMPIFY', message = '', fields = [], ok = 'OK', cancel = 'Cancel', danger = false, image = null, note = '', wide = false, cover = '' }) {
+function winDialog({ title = 'SORANIX', message = '', fields = [], ok = 'OK', cancel = 'Cancel', danger = false, image = null, note = '', wide = false, cover = '' }) {
   return new Promise(resolve => {
     closeMenus();
     const back = document.createElement('div');
@@ -2169,7 +2169,7 @@ async function openArtistInfo(id) {
   try { a = await artistProfile(id); }
   catch (e) { if (ART.cur === id) body.innerHTML = `<div class="art-msg">Could not load this artist.<br>${esc(e.message)}</div>`; return; }
   if (ART.cur !== id) return;
-  $('#art-title').textContent = 'WINAMPIFY ARTIST: ' + a.name.toUpperCase();
+  $('#art-title').textContent = 'SORANIX ARTIST: ' + a.name.toUpperCase();
   const img = a.images?.[0]?.url;
   body.innerHTML =
     `<div class="art-hero"${img ? ` style="background-image:url('${esc(img)}')"` : ''}><div class="art-shade"></div>` +
@@ -2295,7 +2295,7 @@ function placeFree(el) {
 }
 
 /* ------------------------------------------------------------------ pixel font
-   A small hand-drawn 5-pixel-high font (Winampify's own), drawn as crisp squares so labels
+   A small hand-drawn 5-pixel-high font (Soranix's own), drawn as crisp squares so labels
    look like classic pixel art. Lowercase is shown as small capitals. Text with characters it
    doesn't have (Japanese, Arabic, emoji...) falls back to the normal font. */
 const PXF = (() => {
@@ -2485,11 +2485,11 @@ async function showAbout() {
   // the real version (the one in package.json, same as the updater and the GitHub release)
   const ver = APP_VERSION || (await window.desktop?.appVersion?.().catch(() => '')) || '';
   winAlert([
-    `WINAMPIFY ${ver}`.trim(),
+    `SORANIX ${ver}`.trim(),
     'A classic-style desktop music player for your Spotify account.',
     '',
     'UNOFFICIAL SOFTWARE',
-    'Winampify is an unofficial, fan-made project for personal use. It is not made, endorsed or supported by Spotify or by Winamp. "Spotify" and "Winamp" are trademarks of their respective owners.',
+    'Soranix is an unofficial, fan-made project for personal use. It is not made, endorsed or supported by Spotify. "Spotify" is a trademark of Spotify AB.',
     '',
     'WHAT YOU NEED',
     '- A Spotify Premium account (needed for playback through Spotify\'s Web Playback SDK)',
@@ -2514,12 +2514,12 @@ async function showAbout() {
     '- Menu > Settings resets window positions, sizes and column widths',
     '',
     'GOOD TO KNOW',
-    '- Balance really pans Winampify\'s sound (left / right) through Windows',
+    '- Balance really pans Soranix\'s sound (left / right) through Windows',
     '- Up Next (the UP button) shows what plays next: double-click a song to jump to it',
-    '- Spotify limits how many requests an app may make, so Winampify keeps copies of your playlists and lists on this PC and asks Spotify as rarely as it can. If Spotify asks to wait, saved copies keep working',
-    '- Updates: Winampify checks for new versions and asks before installing (Settings > Check for updates)',
-    '- Windows media controls, media keys and the taskbar preview buttons control Winampify too',
-    '- Your login and settings are stored only on this PC. Troubleshooting log: %APPDATA%\\winampify\\winampify.log',
+    '- Spotify limits how many requests an app may make, so Soranix keeps copies of your playlists and lists on this PC and asks Spotify as rarely as it can. If Spotify asks to wait, saved copies keep working',
+    '- Updates: Soranix checks for new versions and asks before installing (Settings > Check for updates)',
+    '- Windows media controls, media keys and the taskbar preview buttons control Soranix too',
+    '- Your login and settings are stored only on this PC. Troubleshooting log: %APPDATA%\\Soranix\\soranix.log',
     '',
     'CREDITS',
     'Music and playback: Spotify Web API and Web Playback SDK',
@@ -2528,8 +2528,8 @@ async function showAbout() {
     'Similar music: Deezer (related artists)',
     'Visualizer: Butterchurn (MilkDrop presets)',
     'Desktop app: Electron (castLabs build with Widevine)',
-    'github.com/mixooo/Winampify',
-  ].join('\n'), { title: 'ABOUT WINAMPIFY', ok: 'Close', wide: true });
+    'github.com/mixooo/Soranix',
+  ].join('\n'), { title: 'ABOUT SORANIX', ok: 'Close', wide: true });
 }
 
 /* ------------------------------------------------------------------ real sound for the visualizers
@@ -2699,7 +2699,7 @@ function setupMilkdrop() {
   if (isShown('md')) { winEl('md').classList.add('hidden'); toggleMilkdrop(true); }
 }
 
-/* Settings > Always on top: Winampify's windows stay above other apps (clicks elsewhere still
+/* Settings > Always on top: Soranix's windows stay above other apps (clicks elsewhere still
    go to the app behind). Remembered after restarts. */
 function setOnTop(on) {
   LS.set('onTop', on);
@@ -2713,7 +2713,7 @@ function setOnTop(on) {
    Spotify's rate limits almost nothing. */
 const UPN = { items: [], timer: 0, loading: false, at: 0 };
 function upNextSoon(ms = 1200) { clearTimeout(UPN.timer); UPN.timer = setTimeout(loadUpNext, ms); }
-/* What plays next, worked out here when the song is from Winampify's playlist (or a mix) and
+/* What plays next, worked out here when the song is from Soranix's playlist (or a mix) and
    shuffle is off: your queued songs first, then the rest of the list. No request needed.
    Otherwise (shuffle, or music started elsewhere) Spotify is asked. */
 function localUpNext() {
@@ -2768,7 +2768,7 @@ function renderUpNext() {
     `<span class="t">${i + 1}. ${esc(t.artist)} - ${esc(t.name)}</span><span class="d">${fmt(t.dur)}</span></div>`).join('');
   setPx($('#upn-count'), `${UPN.items.length} NEXT`);
 }
-/* Jump to a queued song: if it's in the Winampify playlist, play it from there (keeps the
+/* Jump to a queued song: if it's in the Soranix playlist, play it from there (keeps the
    order); otherwise skip forward to it. */
 async function jumpUpNext(i) {
   const t = UPN.items[i]; if (!t || !ready()) return;
@@ -2802,7 +2802,7 @@ function setupUpNext() {
 
 /* ------------------------------------------------------------------ Queue (songs you added)
    Spotify's queue mixes the songs you add with the rest of what's playing, and doesn't say which
-   is which, so Winampify remembers what you add here. A song leaves the list once it starts
+   is which, so Soranix remembers what you add here. A song leaves the list once it starts
    playing (or once it's no longer in Spotify's queue, e.g. cleared in the Spotify app). */
 const QU = { items: LS.get('myQueue', []) };
 /* same song? Spotify sometimes swaps in another copy of a song (different id), so also
@@ -2980,7 +2980,7 @@ function setupClutter() {
 
 /* ------------------------------------------------------------------ drag to reorder
    Press on a song and drag up or down: a green line shows where it will land. Works in the
-   Winampify playlist window and in Spotify playlists you made (saved to Spotify). */
+   Soranix playlist window and in Spotify playlists you made (saved to Spotify). */
 function enableReorder(box, rowSel, { canDrag = () => true, selected = () => [], onDrop, scroller = box }) {
   let st = null;
   // the green line lives on top of everything (lists get redrawn, so it can't live inside them)
@@ -3036,7 +3036,7 @@ function moveBlock(list, idx, gap) {
   return { list: rest, at };
 }
 function setupReorder() {
-  // Winampify playlist window
+  // Soranix playlist window
   enableReorder($('#pllist'), '.plrow', {
     selected: () => [...S.plSel],
     onDrop: (idx, gap) => {
@@ -3132,11 +3132,32 @@ async function filterView(q) {
    downloaded again when its stamp changes, so opening it is instant and costs no requests. */
 const DB = (() => {
   let opening;
-  const open = () => (opening ??= new Promise((res, rej) => {
-    const r = indexedDB.open('winampify', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('kv');
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  }));
+  const openDb = name => new Promise((res, rej) => {
+    const r = indexedDB.open(name, 1); let fresh = false;
+    r.onupgradeneeded = () => { fresh = true; r.result.createObjectStore('kv'); };
+    r.onsuccess = () => res({ db: r.result, fresh }); r.onerror = () => rej(r.error);
+  });
+  const open = () => (opening ??= (async () => {
+    const { db, fresh } = await openDb('soranix');
+    // the app used to be called Winampify: bring its saved copies over once (no requests)
+    if (fresh && ((await indexedDB.databases?.()) || []).some(d => d.name === 'winampify')) {
+      try {
+        const { db: old } = await openDb('winampify');
+        const all = await new Promise((res, rej) => {
+          const out = [], c = old.transaction('kv').objectStore('kv').openCursor();
+          c.onsuccess = () => { const cur = c.result; if (cur) { out.push([cur.key, cur.value]); cur.continue(); } else res(out); };
+          c.onerror = () => rej(c.error);
+        });
+        await new Promise((res, rej) => {
+          const t = db.transaction('kv', 'readwrite'), st = t.objectStore('kv');
+          for (const [k, v] of all) st.put(v, k);
+          t.oncomplete = res; t.onerror = () => rej(t.error);
+        });
+        old.close(); indexedDB.deleteDatabase('winampify');
+      } catch {}
+    }
+    return db;
+  })());
   const run = async (mode, fn) => {
     const db = await open();
     return new Promise((res, rej) => {
@@ -3368,9 +3389,9 @@ function saveAnswer(path, j) {
 }
 /* ------------------------------------------------------------------ Windows media controls
    The song, artist and cover show in Windows' media flyout (volume / lock screen), and its
-   buttons and your keyboard's media keys control Winampify.
+   buttons and your keyboard's media keys control Soranix.
    The music itself plays inside Spotify's player frame, which Windows would describe only as
-   "Winampify", so this page plays a silent sound alongside it: that makes Windows read the
+   "Soranix", so this page plays a silent sound alongside it: that makes Windows read the
    details from here. No Spotify requests: everything comes from the player. */
 const OSM = { el: null, key: '', playing: null, posAt: 0 };
 function silentTrack() {
@@ -3425,7 +3446,7 @@ function setupOsMedia() {
 setupOsMedia();
 
 /* ------------------------------------------------------------------ updates
-   Winampify checks GitHub for a newer release twice a day and asks before installing it. "Later"
+   Soranix checks GitHub for a newer release twice a day and asks before installing it. "Later"
    hides that version for a day; Settings > Check for updates asks right away. */
 let APP_VERSION = '';
 window.desktop?.appVersion?.().then(v => { APP_VERSION = v || ''; });
@@ -3438,19 +3459,19 @@ window.desktop?.onUpdate?.(async m => {
     if (!m.manual && later?.version === m.version && Date.now() - later.at < DAY) return;
     const notes = plainNotes(m.notes);
     const yes = await winConfirm(
-      `Winampify ${m.version} is available (you have ${m.current}).\n\n` +
+      `Soranix ${m.version} is available (you have ${m.current}).\n\n` +
       (notes ? `What's new:\n${notes}\n\n` : '') +
-      `Install it now? Winampify downloads it (${m.sizeMB} MB), checks it, closes, updates and starts again.`,
+      `Install it now? Soranix downloads it (${m.sizeMB} MB), checks it, closes, updates and starts again.`,
       { title: 'UPDATE AVAILABLE', ok: 'Install', cancel: 'Later', wide: true });
     if (yes) { showMsg('DOWNLOADING UPDATE...', 3000); window.desktop.installUpdate(); }
     else LS.set('updLater', { version: m.version, at: Date.now() });
   } else if (m.state === 'downloading') showMsg(`DOWNLOADING UPDATE ${m.pct}%`, 3000);
-  else if (m.state === 'installing') showMsg(`INSTALLING WINAMPIFY ${m.version} - BACK IN A FEW SECONDS`, 8000);
-  else if (m.state === 'none') showMsg(`WINAMPIFY ${m.version} IS THE LATEST VERSION`, 2500);
-  else if (m.state === 'error') winAlert('The update could not be installed:\n' + m.message + '\n\nYou can also download it from github.com/mixooo/Winampify/releases', { title: 'UPDATE' });
+  else if (m.state === 'installing') showMsg(`INSTALLING SORANIX ${m.version} - BACK IN A FEW SECONDS`, 8000);
+  else if (m.state === 'none') showMsg(`SORANIX ${m.version} IS THE LATEST VERSION`, 2500);
+  else if (m.state === 'error') winAlert('The update could not be installed:\n' + m.message + '\n\nYou can also download it from github.com/mixooo/Soranix/releases', { title: 'UPDATE' });
 });
 
-/* buttons under the taskbar preview (point at Winampify on the taskbar) */
+/* buttons under the taskbar preview (point at Soranix on the taskbar) */
 window.desktop?.onThumbCmd?.(cmd => {
   S.activeAt = Date.now();
   if (cmd === 'play') { if (S.track && !S.paused) return; return T.play(); }   // already playing: don't restart the song
@@ -3460,7 +3481,7 @@ window.desktop?.onThumbCmd?.(cmd => {
 const away = () => S.paused !== false && Date.now() - (S.activeAt || Date.now()) > 20 * 60000;
 
 /* ------------------------------------------------------------------ cleanup of saved copies
-   Once a day: anything not opened for 60 days is deleted, and if Winampify's storage ever goes
+   Once a day: anything not opened for 60 days is deleted, and if Soranix's storage ever goes
    over 50 MB, the least recently used quarter goes too. */
 async function cleanSaved() {
   if (Date.now() - LS.get('dbCleanAt', 0) < DAY) return;

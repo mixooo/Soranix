@@ -2,13 +2,13 @@
 
 | Your Mac | Download |
 |---|---|
-| Apple Silicon (M1 or newer) | `Winampify-<version>-arm64.dmg` |
-| Intel | `Winampify-<version>-x64.dmg` |
+| Apple Silicon (M1 or newer) | `Soranix-<version>-arm64.dmg` |
+| Intel | `Soranix-<version>-x64.dmg` |
 
-1. Open the `.dmg` and drag **Winampify** to **Applications**.
+1. Open the `.dmg` and drag **Soranix** to **Applications**.
 2. The app isn't signed by Apple yet, so run this once in Terminal:
    ```
-   xattr -cr /Applications/Winampify.app
+   xattr -cr /Applications/Soranix.app
    ```
 <!--unsigned-->
 
@@ -20,17 +20,17 @@
 
 | Distribution | Download |
 |---|---|
-| Ubuntu / Debian / Mint | `winampify_<version>_amd64.deb` |
-| Other Linux (x64) | `Winampify-<version>-x86_64.AppImage` |
+| Ubuntu / Debian / Mint | `soranix_<version>_amd64.deb` |
+| Other Linux (x64) | `Soranix-<version>-x86_64.AppImage` |
 
 - **.deb:** install it with
   ```
-  sudo apt install ./winampify_<version>_amd64.deb
+  sudo apt install ./soranix_<version>_amd64.deb
   ```
 - **AppImage:** make it executable and run it. On Ubuntu 24.04 or newer it may need `--no-sandbox`:
   ```
-  chmod +x Winampify-<version>-x86_64.AppImage
-  ./Winampify-<version>-x86_64.AppImage --no-sandbox
+  chmod +x Soranix-<version>-x86_64.AppImage
+  ./Soranix-<version>-x86_64.AppImage --no-sandbox
   ```
 
 ### Not on Mac and Linux yet

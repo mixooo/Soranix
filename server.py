@@ -1,4 +1,4 @@
-"""Winampify local server: serves this folder at http://127.0.0.1:8888/ and tells the
+"""Soranix local server: serves this folder at http://127.0.0.1:8888/ and tells the
 browser never to cache, so every refresh picks up the newest files."""
 import http.server
 import os
@@ -15,5 +15,5 @@ class NoCache(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-print("Winampify is running at http://127.0.0.1:8888/  (close this window to stop)")
+print("Soranix is running at http://127.0.0.1:8888/  (close this window to stop)")
 http.server.ThreadingHTTPServer(("127.0.0.1", 8888), NoCache).serve_forever()

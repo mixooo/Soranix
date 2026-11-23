@@ -1,5 +1,5 @@
-// Runs inside the Winampify window before the page. It tells the desktop shell whether the
-// mouse is over a Winampify window (catch the click) or over empty space (let the click
+// Runs inside the Soranix window before the page. It tells the desktop shell whether the
+// mouse is over a Soranix window (catch the click) or over empty space (let the click
 // fall through to whatever is behind), and exposes minimize / quit to the page.
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -15,13 +15,13 @@ contextBridge.exposeInMainWorld('desktop', {
   onDisplays: cb => ipcRenderer.on('displays', (_e, d) => cb(d)),
   // where the player (main + EQ + playlist) is, in page coordinates
   playerRect: r => ipcRenderer.send('player-rect', r),
-  // the areas the layer should actually cover: Winampify windows, menus, dialogs
+  // the areas the layer should actually cover: Soranix windows, menus, dialogs
   layerShape: rects => ipcRenderer.send('layer-shape', rects),
   // Spotify login in a small pop-up window
   openLogin: url => ipcRenderer.send('open-login', url),
-  // left/right balance of Winampify's sound (-100 left ... 100 right)
+  // left/right balance of Soranix's sound (-100 left ... 100 right)
   setBalance: v => ipcRenderer.send('balance', v),
-  // keep Winampify above other apps
+  // keep Soranix above other apps
   setOnTop: on => ipcRenderer.send('on-top', !!on),
   // the buttons under the taskbar preview (prev / play / pause / stop / next)
   onThumbCmd: cb => ipcRenderer.on('thumb-cmd', (_e, cmd) => cb(cmd)),

@@ -1,6 +1,6 @@
-# Builds Winampify's icons from icons\logo-source.webp using Windows' own image codecs
+# Builds Soranix's icons from icons\logo-source.webp using Windows' own image codecs
 # (no extra installs): makes the outer white background transparent, then writes
-# PNGs for the app window / taskbar and a multi-size winampify.ico for shortcuts.
+# PNGs for the app window / taskbar and a multi-size soranix.ico for shortcuts.
 Add-Type -AssemblyName PresentationCore, WindowsBase
 Add-Type -ReferencedAssemblies PresentationCore, WindowsBase, System.Xaml -TypeDefinition @'
 using System;
@@ -81,7 +81,7 @@ public static class IconMaker {
         int[] sizes = { 256, 64, 48, 32, 24, 16 };
         var images = new List<byte[]>();
         foreach (int s in sizes) images.Add(Png(Square(clean, s, s <= 24 ? 0.0 : 0.03)));
-        using (var fs = File.Create(Path.Combine(outDir, "winampify.ico")))
+        using (var fs = File.Create(Path.Combine(outDir, "soranix.ico")))
         using (var bw = new BinaryWriter(fs)) {
             bw.Write((short)0); bw.Write((short)1); bw.Write((short)sizes.Length);
             int offset = 6 + 16 * sizes.Length;
@@ -101,4 +101,4 @@ public static class IconMaker {
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 [IconMaker]::Build((Join-Path $dir 'logo-source.webp'), $dir)
 Get-ChildItem $dir -Filter 'icon-*.png' | Select-Object Name, Length
-Get-Item (Join-Path $dir 'winampify.ico') | Select-Object Name, Length
+Get-Item (Join-Path $dir 'soranix.ico') | Select-Object Name, Length

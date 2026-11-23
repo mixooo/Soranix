@@ -1,13 +1,13 @@
-# Winampify
+# Soranix
 
 **A classic-style desktop music player for Spotify Premium on Windows, now also on Mac and Linux (test builds).**
 Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, and a design built around one goal: use as few Spotify requests as possible, so you don't hit Spotify's cooldowns.
 
-![Winampify: the player, Up Next, playlist editor, library and queue windows docked together](docs/screenshots/overview.png)
+![Soranix: the player, Up Next, playlist editor, library and queue windows docked together](docs/screenshots/overview.png)
 
 <p align="center"><img src="docs/screenshots/milkdrop.png" alt="The MilkDrop visualizer window" width="400"></p>
 
-> Unofficial, fan-made project. Not made, endorsed or supported by Spotify or Winamp. "Spotify" and "Winamp" are trademarks of their respective owners.
+> Unofficial, fan-made project. Not made, endorsed or supported by Spotify. "Spotify" is a trademark of Spotify AB.
 
 ## Download
 
@@ -15,27 +15,27 @@ Everything is on the [Releases page](../../releases/latest).
 
 | System | File |
 |---|---|
-| Windows | `Winampify-<version>.msi` |
-| Mac with Apple Silicon (M1 or newer) | `Winampify-<version>-arm64.dmg` |
-| Mac with Intel | `Winampify-<version>-x64.dmg` |
-| Ubuntu / Debian / Mint | `winampify_<version>_amd64.deb` |
-| Other Linux (x64) | `Winampify-<version>-x86_64.AppImage` |
+| Windows | `Soranix-<version>.msi` |
+| Mac with Apple Silicon (M1 or newer) | `Soranix-<version>-arm64.dmg` |
+| Mac with Intel | `Soranix-<version>-x64.dmg` |
+| Ubuntu / Debian / Mint | `soranix_<version>_amd64.deb` |
+| Other Linux (x64) | `Soranix-<version>-x86_64.AppImage` |
 
 ### Windows
 
 Download the `.msi` and run it.
 
-- Installs for your Windows user only (no administrator rights) into `%LOCALAPPDATA%\Programs\Winampify`, with Start menu and Desktop shortcuts.
+- Installs for your Windows user only (no administrator rights) into `%LOCALAPPDATA%\Programs\Soranix`, with Start menu and Desktop shortcuts.
 - The MSI isn't code-signed, so SmartScreen may say "Unknown publisher" the first time: **More info > Run anyway**.
-- A newer MSI upgrades the installed copy. Uninstalling keeps your login and settings (`%APPDATA%\winampify`).
-- **Updates:** from version 1.0.327 on, Winampify checks this repo's Releases twice a day and **asks before installing** anything. When you press **Install**, it downloads the new MSI, checks its SHA-256 fingerprint against the one published with the release, then closes, updates and starts again. **Settings > Check for updates** checks right away.
+- A newer MSI upgrades the installed copy. Uninstalling keeps your login and settings (`%APPDATA%\Soranix`).
+- **Updates:** from version 1.0.327 on, Soranix checks this repo's Releases twice a day and **asks before installing** anything. When you press **Install**, it downloads the new MSI, checks its SHA-256 fingerprint against the one published with the release, then closes, updates and starts again. **Settings > Check for updates** checks right away.
 
 ### Mac (test build)
 
-1. Open the `.dmg` and drag **Winampify** to **Applications**.
+1. Open the `.dmg` and drag **Soranix** to **Applications**.
 2. The app isn't signed by Apple yet, so run this once in Terminal:
    ```
-   xattr -cr /Applications/Winampify.app
+   xattr -cr /Applications/Soranix.app
    ```
 3. MilkDrop asks for **Screen Recording** permission, which it needs to hear the music.
 
@@ -46,15 +46,15 @@ Download the `.msi` and run it.
 
 - **.deb** (Ubuntu, Debian, Mint): install it with
   ```
-  sudo apt install ./winampify_<version>_amd64.deb
+  sudo apt install ./soranix_<version>_amd64.deb
   ```
-  then open Winampify from your app menu.
+  then open Soranix from your app menu.
 - **AppImage** (other distributions): make it executable and run it. On Ubuntu 24.04 or newer it may need `--no-sandbox`:
   ```
-  chmod +x Winampify-<version>-x86_64.AppImage
-  ./Winampify-<version>-x86_64.AppImage --no-sandbox
+  chmod +x Soranix-<version>-x86_64.AppImage
+  ./Soranix-<version>-x86_64.AppImage --no-sandbox
   ```
-- On Wayland desktops Winampify runs through XWayland, because its see-through windows need X11.
+- On Wayland desktops Soranix runs through XWayland, because its see-through windows need X11.
 
 ### Not on Mac and Linux yet
 
@@ -66,14 +66,14 @@ Media keys and the system's now-playing controls work on all three.
 
 ## One-time setup (about 3 minutes)
 
-Winampify talks to Spotify through **your own** free Spotify developer app:
+Soranix talks to Spotify through **your own** free Spotify developer app:
 
 1. Go to <https://developer.spotify.com/dashboard>, log in and click **Create app**.
    - Name and description: anything you like.
    - **Redirect URI**: `http://127.0.0.1:8888/` (exactly like this), then **Add**.
    - Tick **Web API** and **Web Playback SDK**, then save.
 2. Open the app's **Settings** and copy the **Client ID**.
-3. Start Winampify, paste the Client ID in the library window and click **Connect**. You log in on Spotify's own page; Winampify never sees your password.
+3. Start Soranix, paste the Client ID in the library window and click **Connect**. You log in on Spotify's own page; Soranix never sees your password.
 4. Getting a "403" error? In the dashboard, open **User Management** and add the email of the Spotify account you log in with.
 
 Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
@@ -96,7 +96,7 @@ Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
 - **Song info**, synced **lyrics** (LRCLIB) and a **MilkDrop** visualizer (Butterchurn) that reacts to your PC's sound.
 
 **Windows integration**
-- Song, artist and cover in Windows' media flyout and lock screen. Its buttons and your keyboard's media keys control Winampify.
+- Song, artist and cover in Windows' media flyout and lock screen. Its buttons and your keyboard's media keys control Soranix.
 - Previous, Play, Pause, Stop and Next buttons in the taskbar preview.
 - Shows in the taskbar and Alt-Tab like any app.
 
@@ -121,11 +121,11 @@ While you're typing in a box (search, a playlist name, a dialog), keys go to the
 
 ## Built to avoid Spotify's cooldowns
 
-Spotify apps in developer mode get blocked for an hour or more when they ask too often. Winampify is designed to ask as rarely as possible:
+Spotify apps in developer mode get blocked for an hour or more when they ask too often. Soranix is designed to ask as rarely as possible:
 
 - **Saved copies on your PC.** Playlists are saved together with Spotify's version stamp, so a playlist only downloads again when it actually changed. Albums, artists, search results, top lists and song details are saved too, each for as long as it makes sense.
-- **One request line.** Requests go out a few at a time with small gaps. Big jobs run slowest. When Spotify asks to wait, Winampify waits exactly as long as Spotify says (the `Retry-After` header) and pauses only that kind of request.
-- **Safe limits.** Kinds of request that Spotify blocks for long periods are counted. Past a safe number per half hour, Winampify uses its saved copy or another route (Search) before Spotify would block.
+- **One request line.** Requests go out a few at a time with small gaps. Big jobs run slowest. When Spotify asks to wait, Soranix waits exactly as long as Spotify says (the `Retry-After` header) and pauses only that kind of request.
+- **Safe limits.** Kinds of request that Spotify blocks for long periods are counted. Past a safe number per half hour, Soranix uses its saved copy or another route (Search) before Spotify would block.
 - **No wasted requests.** Up Next is worked out locally. The playlist list refreshes every 30 minutes, checks its first page before fetching the rest, and pauses while you're away. Your own changes update the saved copies directly instead of downloading again.
 - **Still usable during a block.** Saved playlists, albums and artists keep opening while Spotify makes you wait.
 
@@ -140,9 +140,9 @@ Saved copies take very little space (well under 1 MB for a typical library). Any
 
 ## Privacy
 
-- Your login and settings stay on your PC (`%APPDATA%\winampify`). There's no Winampify server.
+- Your login and settings stay on your PC (`%APPDATA%\Soranix`). There's no Soranix server.
 - The visualizers analyse your PC's sound output locally. Nothing is recorded or sent anywhere.
-- Outside Spotify, Winampify only contacts public music databases: LRCLIB (lyrics), MusicBrainz and Wikipedia (artist info) and Deezer (related artists). It sends them song or artist names only.
+- Outside Spotify, Soranix only contacts public music databases: LRCLIB (lyrics), MusicBrainz and Wikipedia (artist info) and Deezer (related artists). It sends them song or artist names only.
 
 ## Building from source
 
@@ -150,13 +150,13 @@ Needs Node.js, plus a [castLabs EVS](https://github.com/castlabs/electron-releas
 
 ```powershell
 npm install
-node build.js                                                      # release\Winampify\Winampify.exe
-powershell -ExecutionPolicy Bypass -File installer\build-msi.ps1   # dist\Winampify-<version>.msi (needs WiX 3 in tools\wix3)
+node build.js                                                      # release\Soranix\Soranix.exe
+powershell -ExecutionPolicy Bypass -File installer\build-msi.ps1   # dist\Soranix-<version>.msi (needs WiX 3 in tools\wix3)
 ```
 
 - `npm start` runs the app straight from the source folder.
 - `powershell -ExecutionPolicy Bypass -File publish.ps1 -NotesFile notes.md` publishes a release in one step. It raises the version, builds the exe and MSI, writes the MSI's `.sha256` fingerprint, pushes, and creates the GitHub release that installed copies update from.
-- Set `WINAMPIFY_DEBUG=1` to open remote debugging on port 9229.
+- Set `SORANIX_DEBUG=1` to open remote debugging on port 9229.
 
 **Mac and Linux:** GitHub Actions builds them (Actions > **Build Mac & Linux** > Run workflow). Tick **Also publish a GitHub Release** to add the `.dmg`, `.deb` and AppImage files to this version's release. For Spotify to play on Mac, add the castLabs EVS account as the repository secrets `EVS_ACCOUNT_NAME` and `EVS_PASSWD`. On a Mac or Linux machine you can also build locally:
 

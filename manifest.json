@@ -1,6 +1,6 @@
 {
-  "name": "Winampify",
-  "short_name": "Winampify",
+  "name": "Soranix",
+  "short_name": "Soranix",
   "description": "A classic-style desktop player for your Spotify account.",
   "start_url": "./",
   "scope": "./",
