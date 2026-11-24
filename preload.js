@@ -21,8 +21,12 @@ contextBridge.exposeInMainWorld('desktop', {
   openLogin: url => ipcRenderer.send('open-login', url),
   // left/right balance of Soranix's sound (-100 left ... 100 right)
   setBalance: v => ipcRenderer.send('balance', v),
+  // lower the music while a voice chat app plays sound (0 = off, 50, 80, 100 = silent)
+  setDuck: v => ipcRenderer.send('duck', v),
   // keep Soranix above other apps
   setOnTop: on => ipcRenderer.send('on-top', !!on),
+  // Settings > Global hotkeys (Ctrl+Alt+Space / arrows anywhere); answers the ones it couldn't take
+  globalKeys: on => ipcRenderer.invoke('global-keys', !!on),
   // the buttons under the taskbar preview (prev / play / pause / stop / next)
   onThumbCmd: cb => ipcRenderer.on('thumb-cmd', (_e, cmd) => cb(cmd)),
   // updates from GitHub releases: told when one is available, installed only when asked

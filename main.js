@@ -303,12 +303,12 @@ app.whenReady().then(async () => {
   // The layer's real shape: just the Soranix windows (plus open menus / dialogs), so
   // screenshot tools and other window pickers see the desktop and other apps everywhere else.
   // Spotify's login page gets the full rectangle.
-  let shapeKey = '';
+  let shapeKey = '', shapeRects = [];
   const setShape = rects => {
     if (!win || win.isDestroyed()) return;
     const key = JSON.stringify(rects || []);
     if (key === shapeKey) return;
-    shapeKey = key;
+    shapeKey = key; shapeRects = rects || [];
     try { win.setShape(rects && rects.length ? rects : []); } catch (e) { console.error('setShape', e); }
   };
   // an empty shape means "the whole rectangle"; on Linux, where the shape is the only thing
@@ -352,7 +352,19 @@ app.whenReady().then(async () => {
     loginWin.loadURL(url);
   });
 
-  ipcMain.on('ui-hover', (_e, over) => { if (!IS_LINUX && win && !win.isDestroyed()) win.setIgnoreMouseEvents(!over, { forward: true }); });
+  // Clicks reach the layer only while the mouse is over a Soranix window. The page reports that
+  // from its mouse moves, but while another app (a game, say) has the keyboard, Windows sends
+  // the page no mouse moves, so the first click fell through and only brought Soranix forward.
+  // So the mouse position is also checked here against the areas the page covers.
+  let pageOver = false, polledOver = false;
+  const applyHover = () => { if (!IS_LINUX && win && !win.isDestroyed()) win.setIgnoreMouseEvents(!(pageOver || polledOver), { forward: true }); };
+  ipcMain.on('ui-hover', (_e, over) => { pageOver = !!over; applyHover(); });
+  if (!IS_LINUX) setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const p = screen.getCursorScreenPoint(), b = win.getBounds(), x = p.x - b.x, y = p.y - b.y;
+    const over = shapeRects.some(r => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
+    if (over !== polledOver) { polledOver = over; applyHover(); }
+  }, 40);
   // Balance: a tiny helper sets the left/right volume of Soranix's own sound in Windows
   // (the same per-app volume the Windows mixer uses). It quits when Soranix does.
   let balancer = null;
@@ -364,9 +376,32 @@ app.whenReady().then(async () => {
       balancer.on('exit', () => { balancer = null; });
     }
   } catch { balancer = null; }
+  // Settings > Global hotkeys: these work even while another app or a game has the keyboard.
+  // Each command takes the first of its key combinations that no other program uses yet.
+  // Answers which keys each command got (none: every choice was taken).
+  const HOTKEYS = [
+    ['toggle', ['Control+Alt+Space', 'Control+Alt+P', 'Control+Alt+Home']],
+    ['next', ['Control+Alt+Right']], ['prev', ['Control+Alt+Left']],
+    ['volup', ['Control+Alt+Up']], ['voldown', ['Control+Alt+Down']],
+  ];
+  const { globalShortcut } = require('electron');
+  ipcMain.handle('global-keys', (_e, on) => {
+    globalShortcut.unregisterAll();
+    if (!on) return {};
+    const send = cmd => () => { if (win && !win.isDestroyed()) win.webContents.send('thumb-cmd', cmd); };
+    const got = {};
+    for (const [cmd, keys] of HOTKEYS) got[cmd] = keys.find(k => { try { return globalShortcut.register(k, send(cmd)); } catch { return false; } }) || null;
+    return got;
+  });
+  app.on('will-quit', () => globalShortcut.unregisterAll());
   // Settings > Always on top: keep the Soranix windows above other apps
   ipcMain.on('on-top', (_e, on) => { if (win && !win.isDestroyed()) win.setAlwaysOnTop(!!on, 'floating'); });
 
+  // Settings > Lower music while someone talks: how much quieter (0 = off)
+  ipcMain.on('duck', (_e, v) => {
+    const n = Math.max(0, Math.min(100, Math.round(+v || 0)));
+    try { balancer?.stdin.write(`duck ${n}\n`); } catch {}
+  });
   ipcMain.on('balance', (_e, v) => {
     const n = Math.max(-100, Math.min(100, Math.round(+v || 0)));
     try { balancer?.stdin.write(`pan ${n}\n`); } catch {}

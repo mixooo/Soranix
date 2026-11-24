@@ -4,6 +4,8 @@
 // Reads lines like "pan -40" from stdin (-100 = full left, 0 = centre, 100 = full right) and
 // re-applies the current value every second, because Windows creates the app's sound session
 // only once something plays. Usage: balance.exe <process name without .exe>
+// Also ducking: after "duck 80" (0 = off), the music gets that much quieter while a voice chat
+// app (Discord, TeamSpeak, Mumble, Teams...) is playing sound, and comes back afterwards.
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -47,26 +49,56 @@ static class Balance {
     int GetChannelVolume(uint index, out float level);
   }
 
-  static volatile int pan = 0;
-  static string procName;
+  [ComImport, Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IAudioMeterInformation {
+    int GetPeakValue(out float peak);
+  }
 
-  static void Apply() {
+  static volatile int pan = 0;
+  // Ducking: how much quieter (0 = off, 50, 80, 100 = silent) while a voice app plays sound
+  static volatile int duck = 0;
+  static string procName;
+  // voice chat apps whose sound means "someone is talking"
+  static readonly string[] VOICE = { "discord", "discordptb", "discordcanary", "vesktop", "ts3client_win64", "ts3client_win32", "teamspeak",
+    "mumble", "ms-teams", "teams", "zoom", "guilded", "element", "slack", "skype" };
+  static readonly System.Collections.Generic.Dictionary<uint, string> names = new System.Collections.Generic.Dictionary<uint, string>();
+  static float gain = 1;                   // current ducking factor (1 = normal)
+  static readonly Stopwatch voiceAt = new Stopwatch();
+
+  static string NameOf(uint pid) {
+    string n;
+    if (names.TryGetValue(pid, out n)) return n;
+    n = "";
+    try { n = Process.GetProcessById((int)pid).ProcessName; } catch { }
+    if (names.Count > 500) names.Clear();
+    names[pid] = n;
+    return n;
+  }
+
+  // One pass over the sound sessions: is a voice app making sound? Then set our own volume
+  // (left / right for the balance, times the ducking factor).
+  static bool Apply(bool setVolume) {
     var en = (IMMDeviceEnumerator)new MMDeviceEnumerator();
     IMMDevice dev;
-    if (en.GetDefaultAudioEndpoint(0 /*render*/, 1 /*multimedia*/, out dev) != 0 || dev == null) return;
+    if (en.GetDefaultAudioEndpoint(0 /*render*/, 1 /*multimedia*/, out dev) != 0 || dev == null) return false;
     var iid = typeof(IAudioSessionManager2).GUID; object o;
-    if (dev.Activate(ref iid, 23 /*CLSCTX_ALL*/, IntPtr.Zero, out o) != 0) return;
+    if (dev.Activate(ref iid, 23 /*CLSCTX_ALL*/, IntPtr.Zero, out o) != 0) return false;
     IAudioSessionEnumerator se; ((IAudioSessionManager2)o).GetSessionEnumerator(out se);
     int n; se.GetCount(out n);
     float p = pan / 100f;
-    float left = p > 0 ? 1 - p : 1, right = p < 0 ? 1 + p : 1;
+    float left = (p > 0 ? 1 - p : 1) * gain, right = (p < 0 ? 1 + p : 1) * gain;
     var ctx = Guid.Empty;
+    bool voice = false;
     for (int i = 0; i < n; i++) {
       object s; se.GetSession(i, out s);
       uint pid; ((IAudioSessionControl2)s).GetProcessId(out pid);
-      string name = "";
-      try { name = Process.GetProcessById((int)pid).ProcessName; } catch { }
-      if (!string.Equals(name, procName, StringComparison.OrdinalIgnoreCase)) continue;
+      string name = NameOf(pid);
+      if (duck > 0 && Array.IndexOf(VOICE, name.ToLowerInvariant()) >= 0) {
+        var m = s as IAudioMeterInformation; float peak;
+        if (m != null && m.GetPeakValue(out peak) == 0 && peak > 0.02f) voice = true;
+        continue;
+      }
+      if (!setVolume || !string.Equals(name, procName, StringComparison.OrdinalIgnoreCase)) continue;
       var ch = s as IChannelAudioVolume; if (ch == null) continue;
       uint count; ch.GetChannelCount(out count);
       if (count < 2) continue;
@@ -74,6 +106,7 @@ static class Balance {
       if (Math.Abs(l0 - left) > 0.001f) ch.SetChannelVolume(0, left, ref ctx);
       if (Math.Abs(r0 - right) > 0.001f) ch.SetChannelVolume(1, right, ref ctx);
     }
+    return voice;
   }
 
   [STAThread]
@@ -85,15 +118,29 @@ static class Balance {
         var parts = line.Trim().Split(' ');
         int v;
         if (parts.Length == 2 && parts[0] == "pan" && int.TryParse(parts[1], out v)) pan = Math.Max(-100, Math.Min(100, v));
+        if (parts.Length == 2 && parts[0] == "duck" && int.TryParse(parts[1], out v)) duck = Math.Max(0, Math.Min(100, v));
       }
       Environment.Exit(0); // Soranix closed
     });
     reader.IsBackground = true; reader.Start();
-    int last = int.MinValue; var timer = Stopwatch.StartNew();
+    int last = int.MinValue; float lastGain = 1; Stopwatch timer = Stopwatch.StartNew(), scan = Stopwatch.StartNew();
     while (true) {
-      if (pan != last || timer.ElapsedMilliseconds > 1000) {
-        try { Apply(); } catch { }
-        last = pan; timer.Restart();
+      // while ducking is on, look for voice a few times a second; keep the music down for a
+      // moment after the last word, so it doesn't pump up and down between words
+      if (duck > 0 && scan.ElapsedMilliseconds >= 100) {
+        scan.Restart();
+        bool voice = false;
+        try { voice = Apply(false); } catch { }
+        if (voice) voiceAt.Restart();
+      }
+      bool talking = duck > 0 && voiceAt.IsRunning && voiceAt.ElapsedMilliseconds < 800;
+      float target = talking ? 1 - duck / 100f : 1;
+      // down quickly, back up gently
+      if (gain > target) gain = Math.Max(target, gain - 0.12f);
+      else if (gain < target) gain = Math.Min(target, gain + 0.03f);
+      if (pan != last || Math.Abs(gain - lastGain) > 0.001f || timer.ElapsedMilliseconds > 1000) {
+        try { Apply(true); } catch { }
+        last = pan; lastGain = gain; timer.Restart();
       }
       Thread.Sleep(50);
     }

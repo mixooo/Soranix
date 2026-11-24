@@ -228,7 +228,7 @@ function onState(s) {
   Object.assign(S, { track: t, paused: s.paused, pos: s.position, dur: s.duration, ts: performance.now(), shuffle: s.shuffle, repeat: s.repeat_mode });
   if (!s.paused) S.stopped = false;
   if (changed && S.track && S.sleepEnd) { S.sleepEnd = false; S.player?.pause(); showMsg('SLEEP TIMER: GOOD NIGHT', 4000); }
-  if (changed) { S.marqX = 0; renderPL(); markLibCurrent(); lyricsForCurrent(); queuePlayed(t); upNextSoon(); setTimeout(() => reportPlayer(), 1500); }
+  if (changed) { S.marqX = 0; renderPL(); markLibCurrent(); lyricsForCurrent(); queuePlayed(t); upNextSoon(); setTimeout(() => reportPlayer(), 1500); notePlayContext(s, t); }
   if (RADIO.on) radioTick(changed, s.paused);
   osMedia(changed);
   renderStatus();
@@ -499,6 +499,8 @@ function frame(now) {
   if (now - lastFrame < 1000 / 30 - 2) return;                // ~30 frames a second is plenty
   lastFrame = now;
   drawTime(); drawVis(); drawMarquee(now); lyricsTick();
+  if (MINI.on) drawMini(now);
+  if (VL.on || VL.cur !== -2) visLyricsTick();
   const sk = $('#seek');
   const empty = !S.track || !S.dur; if (sk.classList.contains('empty') !== empty) sk.classList.toggle('empty', empty);
   if (!S.seeking) placeH(sk, S.dur ? curPos() / S.dur : 0);
@@ -727,10 +729,18 @@ function renderTreeHead() {
     `<div class="chips">${LIBX.filter ? `<button class="btn sm chip x" data-chip="" title="Show everything">×</button>` : ''}` +
     CHIPS.filter(([k]) => !LIBX.filter || LIBX.filter === k)
       .map(([k, n]) => `<button class="btn sm chip${LIBX.filter === k ? ' on' : ''}" data-chip="${k}">${n}</button>`).join('') +
-    (LIBX.filter === 'playlists' ? `<button class="btn sm chip sub${LIBX.byYou ? ' on' : ''}" id="chip-byyou">By you</button>` : '') + '</div>';
+    (LIBX.filter === 'playlists' ? `<button class="btn sm chip sub${LIBX.byYou ? ' on' : ''}" id="chip-byyou">By you</button>` : '') +
+    (LIBX.filter === 'playlists' && LIBX.byYou ? `<button class="btn sm chip sub${LS.get('plSort', '') ? ' on' : ''}" id="chip-sort" title="Click to change the order">\u21C5 ${(PL_SORTS.find(([k]) => k === LS.get('plSort', '')) || PL_SORTS[0])[1]}</button>` : '') + '</div>';
   $$('#treehead .chip[data-chip]').forEach(b => b.onclick = () => { LIBX.byYou = false; setFilter(b.dataset.chip && b.dataset.chip !== LIBX.filter ? b.dataset.chip : null); });
   const by = $('#chip-byyou');
   if (by) by.onclick = () => { LIBX.byYou = !LIBX.byYou; renderTreeHead(); renderTree(); };
+  const so = $('#chip-sort');
+  if (so) so.onclick = () => {
+    const i = PL_SORTS.findIndex(([k]) => k === LS.get('plSort', ''));
+    const next = PL_SORTS[(i + 1) % PL_SORTS.length][0];
+    LS.set('plSort', next); renderTreeHead(); renderTree();
+    if (next) seedPlayCounts();
+  };
   $('#th-new').onclick = createPlaylist;
   $('#th-refresh').onclick = refreshPlaylistsNow;
 }
@@ -785,7 +795,7 @@ function filteredNodes() {
   if (f === 'playlists') {
     const pls = LIBX.byYou ? S.playlists.filter(p => p.ownerId === S.me?.id) : S.playlists;
     return [['grp', (LIBX.byYou ? 'Made by you' : 'Playlists') + count(pls)],
-      ...(pls.length ? pinFirst(pls).map(p => ['pl:' + p.id, pinLabel(p)]) : [['none', LIBX.byYou ? 'No playlists made by you yet' : 'No playlists yet']])];
+      ...(pls.length ? pinFirst(LIBX.byYou ? sortByListening(pls) : pls).map(p => ['pl:' + p.id, pinLabel(p)]) : [['none', LIBX.byYou ? 'No playlists made by you yet' : 'No playlists yet']])];
   }
   if (f === 'albums') return [['grp', 'Saved albums' + count(LIBX.albums)], ...list('albums', LIBX.albums, 'al:')];
   if (f === 'artists') return [['grp', 'Artists you follow' + count(LIBX.artists)], ...list('artists', LIBX.artists, 'ar:')];
@@ -1131,7 +1141,10 @@ function showWin(k, on) {
   if (on) focusWin(winEl(k));
   reportPlayer();
 }
-function focusWin(el) { $$('.win').forEach(w => w.classList.toggle('active', w === el)); el.style.zIndex = ++zTop; }
+function focusWin(el) {
+  if (MINI.on && el.dataset.win !== 'main') toggleMini(false); // another window was opened: full player again
+  $$('.win').forEach(w => w.classList.toggle('active', w === el)); el.style.zIndex = ++zTop;
+}
 function setZoom(z) {
   const old = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1;
   const k = z / old, m = winEl('main'), ax = m.offsetLeft, ay = m.offsetTop;
@@ -1274,6 +1287,7 @@ function setupWindows() {
     $$('.tbtn', w).forEach(b => b.addEventListener('click', e => {
       const act = b.dataset.act, k = w.dataset.win;
       if (act === 'shade') toggleShade(w);
+      else if (act === 'mini') toggleMini();
       else if (act === 'menu') mainMenu(e);
       else if (act === 'minimize') { if (window.desktop) window.desktop.minimize(); else w.classList.toggle('shaded'); }
       else if (act === 'close') {
@@ -1572,6 +1586,7 @@ function mainMenu(e) {
         label: n, check: Math.abs(cur - crispZoom(k)) < 0.01, fn: () => { setZoom(crispZoom(k)); showMsg('SIZE: ' + n.toUpperCase()); },
       }));
     } },
+    { label: 'Mini mode   (Ctrl+M)', check: MINI.on, fn: () => toggleMini() },
     { label: 'Settings   (Ctrl+P)', sub: settingsItems },
     '-',
     ['Time: elapsed / remaining', () => { S.remaining = !S.remaining; LS.set('remaining', S.remaining); }],
@@ -1583,6 +1598,10 @@ function mainMenu(e) {
 function settingsItems() {
   return [
     { label: 'Always on top', check: LS.get('onTop', false), disabled: !window.desktop?.setOnTop, fn: () => setOnTop(!LS.get('onTop', false)) },
+    { label: `Global hotkeys (${keyName(GK.got.toggle) || 'Ctrl+Alt+Space'}, Ctrl+Alt+arrows), also in games`, check: LS.get('globalKeys', false), disabled: !window.desktop?.globalKeys, fn: () => setGlobalKeys(!LS.get('globalKeys', false)) },
+    { label: 'Lyrics on the MilkDrop visualizer', check: VL.on, fn: () => setVisLyrics(!VL.on) },
+    { label: 'Lower music while someone talks (Discord, TeamSpeak...)', disabled: !window.desktop?.setDuck, sub: () =>
+      [['Off', 0], ['A little (50%)', 50], ['A lot (80%)', 80], ['Silent', 100]].map(([n, v]) => ({ label: n, check: LS.get('duck', 0) === v, fn: () => setDuck(v) })) },
     { label: 'After a searched song, play similar music', check: radioEnabled(), fn: () => { LS.set('songRadio', !radioEnabled()); showMsg(radioEnabled() ? 'SEARCHED SONGS: SIMILAR MUSIC PLAYS NEXT' : 'SEARCHED SONGS: THE OTHER RESULTS PLAY NEXT', 2500); } },
     '-',
     { label: 'Reset windows to default (positions and sizes)', fn: resetWindows },
@@ -1615,6 +1634,7 @@ function setupKeys() {
         s: () => T.shuffle(), r: () => T.repeat(),
         n: () => { if (S.me) createPlaylist(); else showMsg('CONNECT SPOTIFY FIRST', 2000); },
         p: () => openSettingsMenu(),
+        m: () => toggleMini(),
       }[k];
       // Ctrl+Shift is only used for mute; Ctrl+A in the playlist window is handled below
       if (act && (!e.shiftKey || k === 'arrowdown')) { act(); e.preventDefault(); return; }
@@ -1644,7 +1664,7 @@ function setupKeys() {
 
 /* ------------------------------------------------------------------ boot */
 async function boot() {
-  setupPixelText(); setupWindows(); setupMain(); setupUpNext(); setupPL(); setupLib(); setupKeys(); setupContextMenus(); setupLyrics(); setupNowPlaying(); setupPlaylistMenus(); setupArtistWindow(); setupMilkdrop(); setupQueueWin(); setupReorder();
+  setupPixelText(); setupWindows(); setupMain(); setupUpNext(); setupPL(); setupLib(); setupKeys(); setupContextMenus(); setupLyrics(); setupNowPlaying(); setupPlaylistMenus(); setupArtistWindow(); setupMilkdrop(); setupQueueWin(); setupReorder(); setupMini();
   renderStatus();
   requestAnimationFrame(frame);
   const p = new URLSearchParams(location.search);
@@ -1662,9 +1682,8 @@ async function boot() {
    database. Only the song title, artist, album and length are sent to it. */
 const AR_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
 const LYR = { cache: new Map(), key: null, lines: null, plain: null, cur: -1, offset: LS.get('lyrOffset2', 0) };
-// built-in timing nudge: lyrics highlight half a second ahead, which feels right with Spotify's audio delay.
-// The Earlier/Later counter shows adjustments on top of this, so 0.0s means this default.
-const LYR_BASE = 1000;
+// lyrics follow the song's own timing; the Earlier / Later counter shifts them (0.0s = no shift)
+const LYR_BASE = 0;
 function placeLyrics() {
   const l = winEl('lib'), y = winEl('lyr');
   const d = displayOf(l) || primaryDisplay();
@@ -1682,6 +1701,7 @@ function toggleLyrics(on = !isShown('lyr')) {
     // beside the library until you drag it somewhere yourself; always fully on screen
     if (!wasMoved('lyr')) { placeLyrics(); if (!inside(rectOf(y), displayOf(y) || primaryDisplay())) placeFree(y); }
     else fitOnScreen(y);
+    NP.cover = NP.lyrics = true; applyNpMode(); // opens with cover art and lyrics
     LYR.key = null; lyricsForCurrent();
   }
 }
@@ -1750,6 +1770,7 @@ async function lyricsForCurrent() {
         }).join('');
         return `<div class="lyr-line words${ar ? ' rtl' : ''}" data-i="${i}"><span${ar ? ' dir="rtl"' : ''}>${html}</span></div>`;
       }).join('');
+    pixelizeLyrics(box);
     padLyrics();
   } else {
     LYR.plain = j.plainLyrics;
@@ -1819,13 +1840,47 @@ function setupLyrics() {
   $('#lyr-late').onclick = () => off(500);
   off(0);
   $('#lyr-retry').onclick = () => { if (S.track) LYR.cache.delete(S.track.uri); LYR.key = null; lyricsForCurrent(); };
+  $('#lyr-theme').onclick = () => {
+    const i = LYR_THEMES.findIndex(([k]) => k === LS.get('lyrTheme', 'green'));
+    setLyricsTheme(LYR_THEMES[(i + 1) % LYR_THEMES.length][0]);
+  };
+  setLyricsTheme(LS.get('lyrTheme', 'green'), true);
+}
+/* lyrics themes: Green (the original), Player (the player's own LCD display and pixel font)
+   and Sunset. Switching re-draws the saved lyrics, so it costs no requests. */
+const LYR_THEMES = [['green', 'Green'], ['player', 'Player'], ['sunset', 'Sunset']];
+function setLyricsTheme(k, quiet = false) {
+  if (!LYR_THEMES.some(([x]) => x === k)) k = 'green';
+  LS.set('lyrTheme', k);
+  const b = $('.lyr-body');
+  for (const [x] of LYR_THEMES) b.classList.toggle('lyrth-' + x, x === k);
+  $('#lyr-theme').title = 'Lyrics theme: ' + LYR_THEMES.find(([x]) => x === k)[1] + ' (click for the next one)';
+  if (!quiet) {
+    showMsg('LYRICS THEME: ' + LYR_THEMES.find(([x]) => x === k)[1].toUpperCase(), 1500);
+    if (LYR.lines) { LYR.key = null; lyricsForCurrent(); }
+  }
+}
+/* Player theme: words the pixel font has are drawn in it (others keep the normal font) */
+function pixelizeLyrics(box) {
+  if (LS.get('lyrTheme', 'green') !== 'player') return;
+  for (const el of $$('.lyr-line .w, .lyr-line:not(.words) > span', box)) {
+    if (el.children.length) continue;
+    const svg = pxSVG(el.textContent);
+    if (svg) el.innerHTML = svg;
+  }
 }
 
 
 /* ------------------------------------------------------------------ now playing: cover art + lyrics
-   Two toggles. Only "Cover art" on: cover only. Only "Lyrics" on: lyrics only. Neither (or both): both. */
-const NP = { cover: LS.get('npCover', false), lyrics: LS.get('npLyrics', false) };
-function npMode() { return NP.cover === NP.lyrics ? 'both' : NP.cover ? 'cover' : 'lyrics'; }
+   Two toggles that show / hide each part. The window opens with both on; turning both off
+   closes it. */
+const NP = { cover: true, lyrics: true };
+function npMode() { return NP.cover && NP.lyrics ? 'both' : NP.cover ? 'cover' : 'lyrics'; }
+function npToggle(part) {
+  NP[part] = !NP[part];
+  if (!NP.cover && !NP.lyrics) { NP.cover = NP.lyrics = true; applyNpMode(); return toggleLyrics(false); }
+  applyNpMode();
+}
 function applyNpMode() {
   const b = $('.lyr-body');
   b.classList.remove('mode-both', 'mode-cover', 'mode-lyrics');
@@ -1850,8 +1905,8 @@ function renderNowInfo() {
   $('#np-art').title = t?.album?.name || '';
 }
 function setupNowPlaying() {
-  $('#np-cover').onclick = () => { NP.cover = !NP.cover; LS.set('npCover', NP.cover); applyNpMode(); };
-  $('#np-lyr').onclick = () => { NP.lyrics = !NP.lyrics; LS.set('npLyrics', NP.lyrics); applyNpMode(); };
+  $('#np-cover').onclick = () => npToggle('cover');
+  $('#np-lyr').onclick = () => npToggle('lyrics');
   $('#np-art').onclick = () => { if (S.track?.album?.uri) { showWin('lib', true); goAlbum({ albumId: idOf(S.track.album.uri), id: idOf(S.track.uri), uri: S.track.uri }); } };
   applyNpMode();
   renderNowInfo();
@@ -2672,6 +2727,46 @@ async function toggleMilkdrop(on = !isShown('md')) {
   if (!wasMoved('md')) placeFree(w); else fitOnScreen(w);
   if (await ensureMilkdrop() && !MD.raf) MD.raf = requestAnimationFrame(mdFrame);
 }
+/* Settings > Lyrics on the visualizer: the line being sung floats over MilkDrop (also in
+   fullscreen), karaoke style. Lyrics come from LRCLIB like the Now Playing window (and share
+   its saved copies), so this costs no Spotify requests. Off by default. */
+const VL = { on: LS.get('mdLyrics', false), key: null, lines: null, cur: -2, size: 0 };
+function setVisLyrics(on) {
+  VL.on = on; LS.set('mdLyrics', on); VL.cur = -2;
+  $('#md-lyr').classList.toggle('on', false);
+  showMsg(on ? 'LYRICS ON THE VISUALIZER: ON' : 'LYRICS ON THE VISUALIZER: OFF', 2000);
+}
+async function visLyricsLoad(t) {
+  const key = t.uri;
+  VL.key = key; VL.lines = null; VL.cur = -2;
+  let j = LYR.cache.get(key);
+  if (j === undefined) {
+    const info = { name: t.name, artist: t.artists?.[0]?.name || '', album: t.album?.name || '', dur: S.dur || t.duration_ms || 0 };
+    try { j = await fetchLyrics(info); LYR.cache.set(key, j); } catch { j = null; }
+  }
+  if (VL.key === key) VL.lines = j && !j.instrumental ? parseLRC(j.syncedLyrics) : [];
+}
+function visLyricsTick() {
+  const box = $('#md-lyr');
+  const show = VL.on && isShown('md') && !!S.track && !S.stopped;
+  if (!show) { if (box.classList.contains('on')) box.classList.remove('on'); return; }
+  if (VL.key !== S.track.uri) { visLyricsLoad(S.track); }
+  const L2 = VL.lines;
+  if (!L2 || !L2.length) { if (box.classList.contains('on')) box.classList.remove('on'); return; }
+  // text size follows the stage, so fullscreen gets big lyrics
+  const h = $('#md-stage').clientHeight, size = Math.round(Math.max(13, Math.min(64, h / 11)));
+  if (size !== VL.size) { VL.size = size; box.style.setProperty('--lyr-size', size + 'px'); }
+  const pos = curPos() + LYR_BASE + LYR.offset;
+  let i = -1;
+  for (let k = 0; k < L2.length && L2[k].t <= pos; k++) i = k;
+  if (i === VL.cur) return;
+  VL.cur = i;
+  const cur = i >= 0 ? L2[i].text.trim() : '', nxt = (L2[i + 1]?.text || '').trim();
+  box.classList.add('on');
+  $('.cur', box).textContent = cur || (i >= 0 ? '\u266A' : '');
+  $('.nxt', box).textContent = nxt;
+}
+
 /* "Fullscreen": the window fills the screen it is on; Esc or double-click to go back. */
 function mdFullscreen(on = !MD.full) {
   const w = winEl('md');
@@ -2872,11 +2967,121 @@ function setupQueueWin() {
   if (LS.get('shown', {}).qu) { winEl('qu').classList.add('hidden'); toggleQueueWin(true); } // was open last time
 }
 
+/* ------------------------------------------------------------------ mini mode
+   The player as one slim bar (song, time, buttons, volume, position), for a corner of a second
+   screen. The other windows are only hidden, not closed, and come back where they were; windows
+   docked to the player move along if the bar was moved. Remembered after restarts. */
+const MINI = { on: false };
+function toggleMini(on = !MINI.on, save = true) {
+  const m = winEl('main');
+  if (on === MINI.on) return;
+  if (on) {
+    if (m.classList.contains('shaded')) toggleShade(m, false);
+    const group = dockedGroup(m).filter(w => w !== m).map(w => w.dataset.win);
+    LS.set('mini', { on: true, group, x: m.offsetLeft, y: m.offsetTop });
+  }
+  MINI.on = on;
+  m.classList.toggle('minibar', on);
+  document.body.classList.toggle('mini-mode', on);
+  if (!on) {
+    // the bar was moved: windows that were docked to the player come along
+    const st = LS.get('mini', {}), dx = m.offsetLeft - (st.x ?? m.offsetLeft), dy = m.offsetTop - (st.y ?? m.offsetTop);
+    if (dx || dy) for (const k of st.group || []) { const w = winEl(k); if (!w) continue; w.style.left = (w.offsetLeft + dx) + 'px'; w.style.top = (w.offsetTop + dy) + 'px'; }
+    LS.set('mini', { on: false });
+    focusWin(m);
+    if (save) { savePos(); keepVisible(); }
+  }
+  MINI.timeKey = MINI.textKey = '';
+  reportPlayer(); reportShape();
+  if (save && on) showMsg('MINI MODE  -  CTRL+M OR DOUBLE-CLICK FOR THE FULL PLAYER', 2500);
+}
+function setupMini() {
+  for (const b of $$('.mini-body .mb')) { b.innerHTML = ICON[b.dataset.m]; b.onclick = () => T[b.dataset.m](); }
+  $('#mini-time').onclick = () => { S.remaining = !S.remaining; LS.set('remaining', S.remaining); };
+  $('#mini-marq').ondblclick = () => toggleMini(false);
+  hDrag($('#mvol'), f => setVol(Math.round(f * 100), true));
+  hDrag($('#mseek'), f => { if (S.track) { S.seeking = true; S.seekFrac = f; } }, f => {
+    if (!S.seeking) return;
+    S.seeking = false;
+    if (S.track && S.player) { const ms = f * S.dur; S.player.seek(ms); S.pos = ms; S.ts = performance.now(); }
+  });
+  if (LS.get('mini', {}).on) toggleMini(true, false);
+}
+function drawMini(now) {
+  const has = !!S.track && !S.stopped;
+  const ms = S.remaining ? S.dur - curPos() : curPos();
+  const t = has ? (S.remaining ? '-' : '') + fmt(Math.max(0, ms)) : '';
+  if (MINI.timeKey !== t) { MINI.timeKey = t; setPx($('#mini-time'), t); }
+  $('#mini-time').style.visibility = has && S.paused && Math.floor(now / 500) % 2 ? 'hidden' : '';
+  const box = $('#mini-marq'), span = $('#mini-text');
+  const text = S.msg && now < S.msgUntil ? S.msg : S.marqBase;
+  if (MINI.textKey !== text) { MINI.textKey = text; MINI.x = 0; setPx(span, text + '  ***  ' + text); span.style.transform = ''; MINI.wide = 0; }
+  if (!MINI.wide) MINI.wide = span.offsetWidth / 2 || 1;
+  if (MINI.wide <= box.clientWidth) { if (span.dataset.txt !== text) setPx(span, text); }
+  else if (now - (MINI.t || 0) > 140) { MINI.t = now; MINI.x = (MINI.x + 2) % MINI.wide; span.style.transform = `translateX(${-MINI.x}px)`; }
+  const f = S.seeking ? S.seekFrac : S.dur ? curPos() / S.dur : 0;
+  $('#mseek i').style.width = (has ? Math.max(0, Math.min(1, f)) * 100 : 0) + '%';
+  $('#mvol i').style.width = S.vol + '%';
+}
+
+/* ------------------------------------------------------------------ listening counts per playlist
+   Spotify doesn't tell apps how much you listen to each playlist, so Soranix counts it here: a
+   song that plays 30 seconds or more from one of your playlists adds a play (and the time) to
+   it. Playlists > By you can then be sorted by Most listened or Recently listened. Costs no
+   requests; once, the last 50 plays from Spotify (Recently Played, 1 request) give it a head start. */
+const PLAYS = { counts: LS.get('plPlays', {}), cur: null };
+const PL_SORTS = [['', 'Spotify order'], ['most', 'Most listened'], ['recent', 'Recently listened']];
+function notePlayContext(s, t) {
+  // Spotify names the playlist when it plays one itself; when Soranix hands it the songs (its
+  // playlist window, a mix) the context is "webapi", and the songs remember their playlist instead
+  PLAYS.cur = t ? { uri: t.uri, ctx: /^spotify:playlist:/.test(s?.context?.uri || '') ? s.context.uri : '', counted: false } : null;
+}
+function countPlayTick() {
+  const c = PLAYS.cur;
+  if (!c || c.counted || !S.track || S.track.uri !== c.uri || S.paused || curPos() < 30000) return;
+  const ctx = c.ctx || S.pl.find(x => x.uri === c.uri)?.ctx || '';
+  const m = /^spotify:playlist:(\w+)$/.exec(ctx);
+  c.counted = true;
+  if (!m) return;
+  c.id = m[1];
+  const e = PLAYS.counts[c.id] || (PLAYS.counts[c.id] = { n: 0, last: 0 });
+  e.n++; e.last = Date.now();
+  LS.set('plPlays', PLAYS.counts);
+  if (LIBX.byYou && LS.get('plSort', '')) renderTree();
+}
+setInterval(countPlayTick, 5000);
+async function seedPlayCounts() {
+  if (LS.get('plPlaysSeeded', false) || !S.me) return;
+  LS.set('plPlaysSeeded', true);
+  try {
+    const j = await api('/me/player/recently-played?limit=50');
+    for (const it of j?.items || []) {
+      const m = /^spotify:playlist:(\w+)$/.exec(it.context?.uri || ''); if (!m) continue;
+      const e = PLAYS.counts[m[1]] || (PLAYS.counts[m[1]] = { n: 0, last: 0 });
+      e.n++; e.last = Math.max(e.last, Date.parse(it.played_at) || 0);
+    }
+    LS.set('plPlays', PLAYS.counts);
+    renderTree();
+  } catch { LS.del('plPlaysSeeded'); }
+}
+function sortByListening(pls) {
+  const mode = LS.get('plSort', '');
+  if (!mode) return pls;
+  const k = p => PLAYS.counts[p.id] || { n: 0, last: 0 };
+  // never played from Soranix: below the rest, in Spotify's order
+  return pls.map((p, i) => [p, i]).sort(([a, i], [b, j]) => {
+    const x = k(a), y = k(b);
+    const d = mode === 'most' ? (y.n - x.n) || (y.last - x.last) : (y.last - x.last) || (y.n - x.n);
+    return d || i - j;
+  }).map(([p]) => p);
+}
+
 /* ------------------------------------------------------------------ roll up (window shade)
    A rolled-up window shows only its title bar. Windows docked underneath it (directly or in a
    chain) slide up to close the gap, and back down when it unrolls, so everything stays docked.
    Remembered after restarts. */
 function toggleShade(w, on = !w.classList.contains('shaded'), save = true) {
+  if (w.dataset.win === 'main' && MINI.on) return toggleMini(false); // double-click on the mini bar: full player
   if (w.classList.contains('shaded') === on) return;
   const before = w.offsetHeight, top = w.offsetTop, bottom = top + before;
   // windows stacked underneath it: touching its bottom edge (and overlapping it sideways),
@@ -3475,8 +3680,39 @@ window.desktop?.onUpdate?.(async m => {
 window.desktop?.onThumbCmd?.(cmd => {
   S.activeAt = Date.now();
   if (cmd === 'play') { if (S.track && !S.paused) return; return T.play(); }   // already playing: don't restart the song
+  // from the global hotkeys
+  if (cmd === 'toggle') return S.track ? T.pause() : T.play();
+  if (cmd === 'volup' || cmd === 'voldown') { setVol(S.vol + (cmd === 'volup' ? 5 : -5)); return showMsg('VOLUME: ' + S.vol + '%', 1000); }
   if (T[cmd]) T[cmd]();
 });
+/* Settings > Lower music while someone talks: the desktop app's sound helper watches voice chat
+   apps (Discord, TeamSpeak, Mumble, Teams...) and turns Soranix down while one plays sound, then
+   back up. Off by default. (A game's own voice chat is part of the game's sound, so it can't be
+   told apart from the game.) */
+function setDuck(v, quiet = false) {
+  LS.set('duck', v);
+  window.desktop?.setDuck?.(v);
+  if (!quiet) showMsg(v ? `VOICE CHAT: MUSIC ${v === 100 ? 'SILENT' : v + '% QUIETER'} WHILE SOMEONE TALKS` : 'VOICE CHAT DUCKING: OFF', 2500);
+}
+if (LS.get('duck', 0)) setDuck(LS.get('duck', 0), true);
+/* Settings > Global hotkeys: Ctrl+Alt+Space play / pause, Ctrl+Alt+Right / Left next / previous,
+   Ctrl+Alt+Up / Down volume, even while a game or another app has the keyboard. Off by default,
+   so they never take keys a game uses. */
+const GK = { got: {} };
+const keyName = k => (k || '').replace(/Control/g, 'Ctrl');
+async function setGlobalKeys(on, quiet = false) {
+  if (!window.desktop?.globalKeys) return;
+  LS.set('globalKeys', on);
+  GK.got = (await window.desktop.globalKeys(on)) || {};
+  if (!on) return quiet || showMsg('GLOBAL HOTKEYS OFF', 2000);
+  const names = { toggle: 'Play / pause', next: 'Next', prev: 'Previous', volup: 'Volume up', voldown: 'Volume down' };
+  const missing = Object.keys(names).filter(c => !GK.got[c]);
+  if (quiet) return;
+  winAlert('Global hotkeys are on. They work even while a game or another app is in front:\n\n' +
+    Object.entries(names).map(([c, n]) => `${n}: ${GK.got[c] ? keyName(GK.got[c]) : '(taken by another program)'}`).join('\n') +
+    (missing.length ? '\n\nAnother program on this PC already uses the missing keys.' : ''), { title: 'GLOBAL HOTKEYS' });
+}
+if (LS.get('globalKeys', false)) setGlobalKeys(true, true);
 /* you're away: nothing playing and no clicks or keys for 20 minutes */
 const away = () => S.paused !== false && Date.now() - (S.activeAt || Date.now()) > 20 * 60000;
 

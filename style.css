@@ -495,6 +495,13 @@ html.desktop .win{filter:drop-shadow(0 3px 6px #0007)}
 #mdcv{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto}
 .md-msg{position:absolute;inset:auto 0 0 0;padding:6px 10px;color:var(--g);font:12px var(--font);text-shadow:0 1px 2px #000;pointer-events:none}
 .md-msg:empty{display:none}
+/* Settings > Lyrics on the visualizer: the current line over MilkDrop, the next one dimmer */
+.md-lyr{position:absolute;left:4%;right:4%;bottom:12%;text-align:center;pointer-events:none;font-family:var(--font);font-weight:bold;
+  color:#fff;text-shadow:0 0 3px #000,0 2px 6px #000,0 0 14px #000a;unicode-bidi:plaintext}
+.md-lyr:not(.on){display:none}
+.md-lyr .cur{font-size:var(--lyr-size,16px);line-height:1.25;transition:opacity .25s}
+.md-lyr .nxt{font-size:calc(var(--lyr-size,16px) * .62);line-height:1.3;margin-top:.3em;opacity:.55}
+.md-lyr.fade .cur{opacity:0}
 .md-bar{display:flex;align-items:center;gap:4px;min-width:0}
 .md-name{flex:1;min-width:0;color:#9aa0c4;font:11px var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mdwin.md-full{border:none;box-shadow:none}
@@ -559,3 +566,47 @@ html.desktop .win{filter:drop-shadow(0 3px 6px #0007)}
 /* playlist refresh line in the sidebar */
 .tree .node[data-id="plrefresh"]{color:#7a7e9c;font-size:11px}
 .tree .node[data-id="plrefresh"]:hover{color:#3f3}
+
+/* ---------------- mini mode: the main window as one slim bar ---------------- */
+.mini-body{display:none;position:relative;height:20px}
+.win.minibar .main-body{display:none}
+.win.minibar .mini-body{display:block}
+body.mini-mode .win:not(#w-main){display:none!important}
+.mini-body > *{position:absolute}
+.mini-time{left:5px;top:3px;width:30px;height:11px;background:#000;color:#00e000;font:7px/11px var(--font);text-align:center;cursor:pointer;line-height:0;padding-top:3px;box-sizing:border-box}
+.mini-marq{left:38px;top:3px;width:104px;height:11px;background:#000;overflow:hidden;white-space:nowrap;cursor:default}
+.mini-marq span{position:absolute;left:0;top:3px;padding-left:2px;line-height:0;color:#00e000}
+.mini-marq span.pxfallback{top:0;font:8px/11px var(--font);line-height:11px}
+.mb{top:3px;width:13px;height:11px;padding:0;cursor:pointer;border:1px solid #2a2c3c;background:linear-gradient(#e2e3ee,#c3c5d6)}
+.mb:active{background:linear-gradient(#b9bbcd,#d6d7e4)}
+.mb svg{display:block;margin:auto;width:8px;height:7px;fill:none;stroke:#2c2e44;stroke-width:1.2;stroke-linejoin:round;shape-rendering:crispEdges}
+.mb[data-m=prev]{left:146px} .mb[data-m=play]{left:159px} .mb[data-m=pause]{left:172px} .mb[data-m=stop]{left:185px} .mb[data-m=next]{left:198px}
+.mini-vol{left:216px;top:6px;width:52px;height:5px;background:#0a0b12;border:1px solid #000;cursor:pointer}
+.mini-vol i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#1f7a1f,#00e000)}
+.mini-seek{left:3px;right:3px;bottom:1px;height:3px;background:#141522;cursor:pointer}
+.mini-seek i{position:absolute;left:0;top:0;bottom:0;background:#c9a83a}
+
+/* ---------------- lyrics themes (the Theme button in Now Playing) ---------------- */
+/* Player: like the player's own display, a black LCD with the pixel font in green */
+.lyrth-player .lyr-text,.lyrth-player.mode-both .lyr-text{background:#000;border-radius:0;box-shadow:inset 1px 1px 0 #000,1px 1px 0 var(--hi)}
+.lyrth-player .lyr-line{font:bold 13px/1.5 var(--mono);text-transform:uppercase;color:#1a7a1a;opacity:1;padding:5px 0}
+.lyrth-player .lyr-line.past{color:#0b3a0b;opacity:1}
+.lyrth-player .lyr-line.next{color:#20a020}
+.lyrth-player .lyr-line:hover{color:#3c3}
+.lyrth-player .lyr-line svg.pxs{height:10px;width:auto;vertical-align:middle}
+.lyrth-player .lyr-line.on svg.pxs{height:12px}
+.lyrth-player .lyr-line.on{font-size:14px}
+.lyrth-player .lyr-line.on span,.lyrth-player .lyr-line.on.words > span,.lyrth-player .lyr-line.on.words .w,.lyrth-player .lyr-line.on.words .w.ar{
+  color:#00e000;text-shadow:0 0 4px #0f08;filter:drop-shadow(0 0 2px #0f06)}
+.lyrth-player .lyr-msg{color:#00a000;font:bold 12px/1.6 var(--mono);text-transform:uppercase}
+/* Sunset: warm glow on a dusk sky */
+.lyrth-sunset .lyr-text,.lyrth-sunset.mode-both .lyr-text{background:linear-gradient(180deg,#140b24 0%,#2b1240 45%,#4a1a3c 80%,#5e2433 100%);border-radius:6px}
+.lyrth-sunset .lyr-line{font:15px/1.45 Georgia,'Times New Roman',serif;color:#b7a3d6;opacity:.7;letter-spacing:.2px}
+.lyrth-sunset .lyr-line.past{color:#7d6a9e;opacity:.45}
+.lyrth-sunset .lyr-line.next{color:#d8c6f0;opacity:.9}
+.lyrth-sunset .lyr-line:hover{color:#fff;opacity:1}
+.lyrth-sunset .lyr-line.on{font-size:18px;font-style:italic}
+.lyrth-sunset .lyr-line.on span,.lyrth-sunset .lyr-line.on.words > span,.lyrth-sunset .lyr-line.on.words .w,.lyrth-sunset .lyr-line.on.words .w.ar{
+  color:transparent;-webkit-background-clip:text;background-clip:text;background-image:linear-gradient(90deg,#ffe08a,#ff9a6b 55%,#ff5f9e);
+  filter:drop-shadow(0 0 6px #ff7a7a88);text-shadow:none}
+.lyrth-sunset .lyr-msg{color:#d8c6f0;font:italic 14px/1.6 Georgia,serif}

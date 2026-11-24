@@ -20,6 +20,7 @@
       <div class="title">
         <span class="tbtn" data-act="menu" title="Menu">&#8801;</span>
         <span class="ridge"></span><span class="tname" data-px="SORANIX">SORANIX</span><span class="ridge"></span>
+        <span class="tbtn" data-act="mini" title="Mini mode (Ctrl+M)">&#9644;</span>
         <span class="tbtn" data-act="minimize" title="Minimize">&#8211;</span>
         <span class="tbtn" data-act="shade" title="Shade">&#9633;</span>
         <span class="tbtn" data-act="close" title="Close">&times;</span>
@@ -49,6 +50,14 @@
         <span class="led-btn" id="tog-shuf" title="Shuffle (S)"><i></i><span data-px>SHUFFLE</span></span>
         <span class="led-btn" id="tog-rep" title="Repeat (R)"><i></i><b>&#8635;</b></span>
         <span class="badge" id="acct" title="Show / hide the Spotify library"></span>
+      </div>
+      <!-- mini mode: the player as one slim bar (Ctrl+M) -->
+      <div class="mini-body">
+        <span class="mini-time" id="mini-time" title="Click: elapsed / remaining"></span>
+        <div class="mini-marq" id="mini-marq" title="Double-click: back to the full player"><span id="mini-text"></span></div>
+        <button class="mb" data-m="prev" title="Previous"></button><button class="mb" data-m="play" title="Play"></button><button class="mb" data-m="pause" title="Pause"></button><button class="mb" data-m="stop" title="Stop"></button><button class="mb" data-m="next" title="Next"></button>
+        <div class="mini-vol" id="mvol" title="Volume"><i></i></div>
+        <div class="mini-seek" id="mseek" title="Seek"><i></i></div>
       </div>
     </div>
   </div>
@@ -173,18 +182,19 @@
     </div>
     <div class="body lyr-body">
       <div class="np-tabs">
-        <span class="npbtn" id="np-cover" title="Show only the cover art"><i></i>Cover art</span>
-        <span class="npbtn" id="np-lyr" title="Show only the lyrics"><i></i>Lyrics</span>
+        <span class="npbtn" id="np-cover" title="Show / hide the cover art"><i></i>Cover art</span>
+        <span class="npbtn" id="np-lyr" title="Show / hide the lyrics"><i></i>Lyrics</span>
         <span class="lcdtag" id="lyr-mode"></span>
       </div>
       <div class="np-art" id="np-art"><img id="np-img" alt=""></div>
       <div class="np-info"><div class="np-title" id="np-title">Nothing playing</div><div class="np-artist" id="np-artist"></div></div>
       <div class="lyr-text" id="lyr-text"><div class="lyr-msg">Play a song and its lyrics show up here.</div></div>
       <div class="lyr-foot">
-        <button class="btn sm" id="lyr-early" title="Lyrics are late: show them earlier">&#9664; Earlier</button>
+        <button class="btn sm" id="lyr-early" title="Lyrics are late: show them earlier">&#9664;</button>
         <span class="lcdtag" id="lyr-off">0.0s</span>
-        <button class="btn sm" id="lyr-late" title="Lyrics are early: show them later">Later &#9654;</button>
+        <button class="btn sm" id="lyr-late" title="Lyrics are early: show them later">&#9654;</button>
         <button class="btn sm" id="lyr-retry" title="Look the lyrics up again">Reload</button>
+        <button class="btn sm" id="lyr-theme" title="Lyrics theme">Theme</button>
         <span class="lyr-src">lyrics: lrclib.net</span>
       </div>
     </div>
@@ -197,7 +207,7 @@
       <span class="tbtn" data-act="close" title="Close">&times;</span>
     </div>
     <div class="body md-body">
-      <div class="md-stage" id="md-stage" title="Double-click: fullscreen"><canvas id="mdcv"></canvas><div class="md-msg" id="md-msg"></div></div>
+      <div class="md-stage" id="md-stage" title="Double-click: fullscreen"><canvas id="mdcv"></canvas><div class="md-lyr" id="md-lyr"><div class="cur"></div><div class="nxt"></div></div><div class="md-msg" id="md-msg"></div></div>
       <div class="md-bar">
         <button class="btn sm" id="md-prev" title="Previous preset">&#9664;</button>
         <button class="btn sm" id="md-next" title="Next preset">&#9654;</button>
