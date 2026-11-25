@@ -1,39 +1,34 @@
 ## What's new
 
-**YouTube Music (new, in test)**
-- Soranix can now play **YouTube Music** as well as Spotify. When it starts, pick **Spotify** or **YouTube Music** (tick "Remember my choice" to skip the question). Click the logo on the player to switch at any time.
-- Same player, same windows: playlist, Up Next, queue, Now Playing, lyrics, mini mode, media keys and hotkeys. In YouTube Music mode everything turns **red** instead of green.
-- **No ads** while you listen.
-- **Sign in with your Google account** from the library to get your Liked music and playlists. "Log out" is in the library too.
-- **Discover new music:** YouTube Music's picks for you as a grid of covers: Listen again, Music videos for you, New releases, Mixed for you, Song mixes, Trending and more. **More** adds to the section you're on.
-- **Search with filters:** All, Songs, Videos, Albums, Artists, Playlists. Albums, artists and playlists open to their songs. Liked music and playlists can show only songs or only videos.
-- **Always the audio version:** videos in your lists play the song's audio track when there's one.
-- **Video** in Now Playing shows the music video where the cover was.
-- **Lyrics** timed to the exact song.
-- **Add to queue** works in YouTube Music mode too.
-- Only the service you're using runs, so YouTube Music mode uses less memory and never asks Spotify for anything.
+**SoundCloud (new, in test)**
+- Soranix can now play **SoundCloud** too. Pick it at start in "Choose your music" or with the logo switch on the player. In SoundCloud mode everything turns **SoundCloud orange**.
+- **Search** with Everything / Tracks / People / Albums / Playlists, and **Discover new music** with SoundCloud's own Discover sections as a grid of covers. Albums, playlists and people open to their songs.
+- Same player and windows: playlist, Up Next, queue, Now Playing, lyrics, mini mode, media keys and hotkeys.
+- **Sign in with authorized token** (in the library): SoundCloud refuses its own sign-in inside apps, so you bring your login over from Firefox or Chrome. The steps are shown in the window. Then your **Likes** and **playlists** appear in the library.
+- **Right-click a song:** Like on SoundCloud, or add it to one of your SoundCloud playlists.
+- Songs only available on **SoundCloud Go+** are marked "(Go+)" and skipped.
+- If SoundCloud asks you to prove you're human, **Verify SoundCloud** appears at the top of the library.
 
-**Mixed playlists (Spotify + YouTube Music together)**
-- The playlist window shows every song in its service's color: **Spotify green, YouTube Music red**. Drag songs into it from the library (or from Discover), or right-click > Add to Soranix playlist.
-- New **MY LISTS** button (next to LIST OPTS): your own lists, saved on your PC, with Spotify and YouTube Music songs side by side. Save what's in the playlist window as a list, play a list, rename, delete, reorder, and drag songs onto a list.
-- When the next song is from the other service, Soranix switches over by itself and keeps playing, usually in under a second.
-- **Up Next** shows the songs of the service you're on.
+**YouTube Music**
+- **Search "All"** now shows every song's length, artist and album (it showed 0:00 and dates before).
+- **Right-click a song:** Save to Liked music, or add it to one of your YouTube Music playlists.
+- The logo is now YouTube Music's exact red.
+
+**Artists (YouTube Music and SoundCloud)**
+- Clicking an artist opens the **artist window**: a **Wikipedia** bio, details (group or solo, where they're from, years active) and links. It opens from search, Discover, the artist's name in Now Playing, or right-click > Go to artist.
 
 **Spotify**
-- **Discover new music** opens first and is now a grid of covers. Your last mix is kept, so opening it costs no requests. **New mix** and **More** are next to each other at the bottom (20 songs each).
-- **Song covers** next to the numbers in your lists (no extra requests). You can turn them off in Settings.
-- **No more stutter** when a searched song starts its mix of similar music.
-- **Liked Songs** opens from its saved copy, with no request when it's fresh.
+- **Search** has a **Podcasts** tab, next to Songs, Artists, Albums and Playlists.
+- New **Discover podcasts** in the library, under Discover new music: podcasts as a grid of covers by topic (Popular, Comedy, True crime, News, Sports, Business and more). More loads 10 more.
 
-**Player**
-- **What's new:** after an update, this window shows once. Settings > What's new in this version shows it again.
-- **Mini mode:** the position and volume bars now respond to clicks and drags.
-- **Pop-ups show in mini mode:** they used to be invisible there and block the screen.
-- **Taskbar and Alt-Tab previews** of the player are live now.
-- **Update progress:** when you update, the player's display shows the download progress.
-- **Switching services:** faster and without flicker. Your open windows stay open (Now Playing, My playlists, MilkDrop, the artist page and the rest).
-- **Choose your music:** the player's logo is on both buttons, and the "Connect your Spotify account" page only appears once you pick Spotify.
+**Playlist window**
+- The playlist window is now **your own list**. Playing something from the library no longer copies it into the playlist window; it plays as it is, and Up Next shows what's next. The playlist window only plays when you start a song from it.
+
+**Fixes**
+- "Choose your music" and the Queue window now open on the monitor your player is on (they always opened on the main monitor).
+- Pressing Play with nothing playing no longer switches to another service.
+- "Choose your music" has room for all three services.
 
 ## Install
 
-On Soranix 1.0.331, the app offers this update by itself; press **Install** (or Settings > Check for updates). Otherwise, download **`Soranix-1.0.332.msi`** below and run it; it keeps your login and playlists.
+On Soranix 1.0.332, the app offers this update by itself; press **Install** (or Settings > Check for updates). Otherwise, download **`Soranix-1.0.333.msi`** below and run it; it keeps your login and playlists.

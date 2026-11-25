@@ -35,8 +35,26 @@ const S = {
   vol: LS.get('vol', 70), remaining: LS.get('remaining', false), visMode: LS.get('visMode', 0),
   seeking: false, msg: null, msgUntil: 0, marqX: 0, marqT: 0, marqBase: '',
   pl: LS.get('pl', []), plSel: new Set(), plAnchor: -1,
+  // what's playing: the playlist window ('pl') or a list from the library ('lib', kept apart so
+  // playing from the library doesn't fill the playlist window)
+  src: LS.get('plSrc', 'pl'), lib: LS.get('plLib', []),
   playlists: [],
 };
+// the list that's playing right now (the playlist window, or the library list a song came from)
+Object.defineProperty(S, 'now', { get: () => (S.src === 'lib' ? S.lib : S.pl), set: v => { if (S.src === 'lib') S.lib = v; else S.pl = v; } });
+const saveNow = () => { LS.set('plSrc', S.src); LS.set('plLib', S.src === 'lib' ? S.lib : []); };
+/* play a list from the library (or Discover, a menu...): it plays as it is, and the playlist
+   window keeps your own songs */
+function playList(tracks, i = 0) {
+  S.src = 'lib'; S.lib = tracks.filter(t => t && t.type === 'track').map(t => ({ ...t }));
+  RADIO.on = false; saveNow(); renderPL(false);
+  return playIndex(Math.max(0, i));
+}
+/* play from the playlist window: from now on it's the list that plays */
+function playFromPl(i) {
+  if (S.src !== 'pl') { S.src = 'pl'; RADIO.on = false; saveNow(); }
+  return playIndex(i);
+}
 
 /* ------------------------------------------------------------------ auth (PKCE) */
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -239,7 +257,7 @@ setInterval(() => { S.player?.getCurrentState().then(s => s && onState(s)).catch
 const curPos = () => (S.paused ? S.pos : Math.min(S.dur, S.pos + performance.now() - S.ts));
 
 function ready() {
-  if (YT.on) { if (!YT.ready) showMsg('YOUTUBE MUSIC IS STILL STARTING - ONE MOMENT', 2500); return YT.ready; }
+  if (YT.on) { if (!YT.ready) showMsg(YT.blocked ? 'SOUNDCLOUD IS BLOCKING THIS CONNECTION FOR NOW - TRY AGAIN LATER' : W().up + ' IS STILL STARTING - ONE MOMENT', 2500); return YT.ready; }
   if (!LS.get('token')) { showMsg('CONNECT SPOTIFY FIRST', 2000); showWin('lib', true); return false; }
   if (!S.deviceId) { showMsg('PLAYER STILL STARTING - TRY AGAIN IN A SECOND', 2500); return false; }
   if (!S.activated) { S.activated = true; S.player.activateElement?.(); }
@@ -257,30 +275,33 @@ function plIndexOfCurrent() {
   if (!S.track) return -1;
   // YouTube Music: a song from your queue doesn't move the playlist, even if it's in it too
   if (YT.on && YT.queuedId && S.track.id === YT.queuedId) return -1;
-  if (sameTrack(S.pl[S.plCur], S.track)) return S.plCur;
-  return (S.plCur = S.pl.findIndex(x => sameTrack(x, S.track)));
+  if (sameTrack(S.now[S.plCur], S.track)) return S.plCur;
+  return (S.plCur = S.now.findIndex(x => sameTrack(x, S.track)));
 }
 function playIndex(i) {
   console.log('[play] index', i, new Error().stack.split(String.fromCharCode(10)).slice(2, 4).join(' | '));
-  const t = S.pl[i]; if (!t) return;
+  const t = S.now[i]; if (!t) return;
   // a mixed playlist: a song from the other service is played there (Soranix switches over)
-  if (svcOfRow(t) !== (YT.on ? 'yt' : 'sp')) return mixHandoff(i);
+  if (svcOfRow(t) !== curRow()) return mixHandoff(i);
   if (YT.on) return ytPlayIndex(i);
   S.plCur = i;
   RADIO.resync = false;   // the list sent below includes everything added to the mix
   // only the Spotify songs around it (in a mixed playlist the others play on YouTube Music)
   let a = i, b = i;
-  while (a > Math.max(0, i - 20) && svcOfRow(S.pl[a - 1]) === 'sp') a--;
-  while (b + 1 < S.pl.length && b + 1 < a + 100 && svcOfRow(S.pl[b + 1]) === 'sp') b++;
-  return playBody({ uris: S.pl.slice(a, b + 1).map(x => x.uri), offset: { position: i - a } });
+  while (a > Math.max(0, i - 20) && svcOfRow(S.now[a - 1]) === 'sp') a--;
+  while (b + 1 < S.now.length && b + 1 < a + 100 && svcOfRow(S.now[b + 1]) === 'sp') b++;
+  return playBody({ uris: S.now.slice(a, b + 1).map(x => x.uri), offset: { position: i - a } });
 }
 const T = {
   play() {
     if (!ready()) return;
     if (S.track && S.paused) return S.player.resume();
     if (S.track && !S.paused) return S.player.seek(0);
-    const first = S.plSel.size ? Math.min(...S.plSel) : 0;
-    if (S.pl.length) return playIndex(first);
+    // (from a stop: the first song of the service you're on, never a switch to another service)
+    const sel = S.plSel.size ? Math.min(...S.plSel) : 0;
+    const first = S.pl.findIndex((t, i) => i >= sel && svcOfRow(t) === curRow());
+    if (first >= 0) return playFromPl(first);
+    if (S.pl.length) return showMsg(`NO ${YT.on ? W().up : 'SPOTIFY'} SONGS IN THE PLAYLIST - PRESS EJECT TO PICK SOMETHING`, 3000);
     showMsg('PLAYLIST EMPTY - PRESS EJECT TO ADD MUSIC', 2500);
   },
   pause() { if (ready() && S.track) S.player.togglePlay(); },
@@ -291,7 +312,7 @@ const T = {
     if (YT.on) return S.player.nextTrack();   // YouTube Music: the queue first, then the playlist (ytm.js)
     const i = plIndexOfCurrent();
     if (i < 0 || S.shuffle || S.repeat === 2) return S.player.nextTrack();
-    if (i + 1 < S.pl.length) return playIndex(i + 1);
+    if (i + 1 < S.now.length) return playIndex(i + 1);
     if (S.repeat === 1) return playIndex(0);
   },
   prev() {
@@ -426,10 +447,10 @@ function renderStatus() {
   setPx($('#khz'), on ? '44' : '');
   $('#ind-stereo').classList.toggle('on', on);
   if (S.track) {
-    const idx = S.pl.findIndex(x => x.uri === S.track.uri || x.id === S.track.id);
+    const idx = S.now.findIndex(x => x.uri === S.track.uri || x.id === S.track.id);
     S.marqBase = `${idx >= 0 ? idx + 1 + '. ' : ''}${S.track.artists.map(a => a.name).join(', ')} - ${S.track.name} (${fmt(S.dur)})`;
   } else {
-    S.marqBase = YT.on ? 'SORANIX - YOUTUBE MUSIC - PRESS EJECT TO PICK SOMETHING' : S.me ? 'SORANIX - PRESS EJECT OR PL TO PICK SOMETHING' : 'SORANIX - CONNECT YOUR SPOTIFY ACCOUNT IN THE LIBRARY WINDOW';
+    S.marqBase = YT.on ? `SORANIX - ${W().up} - PRESS EJECT TO PICK SOMETHING` : S.me ? 'SORANIX - PRESS EJECT OR PL TO PICK SOMETHING' : 'SORANIX - CONNECT YOUR SPOTIFY ACCOUNT IN THE LIBRARY WINDOW';
   }
 }
 
@@ -543,7 +564,7 @@ function setupPL() {
     $$('.plrow', box).forEach(row => row.classList.toggle('sel', S.plSel.has(+row.dataset.i)));
     updPlTime();
   };
-  box.ondblclick = e => { const r = e.target.closest('.plrow'); if (r) playIndex(+r.dataset.i); };
+  box.ondblclick = e => { const r = e.target.closest('.plrow'); if (r) playFromPl(+r.dataset.i); };
   $('#pl-add').onclick = () => { showWin('lib', true); if (S.me) $('#q').focus(); };
   $('#pl-rem').onclick = plRemove;
   $('#pl-sel').onclick = () => { S.plSel = new Set(S.pl.map((_, i) => i)); renderPL(false); };
@@ -569,7 +590,8 @@ function plRemove() {
 }
 function renderPL(save = true) {
   const box = $('#pllist');
-  const cur = S.track;
+  // the playing song is marked only while the window is what plays
+  const cur = S.src === 'pl' ? S.track : null;
   if (!S.pl.length) {
     box.innerHTML = '<div class="plempty">Playlist is empty.<br>Press ADD or Eject to open your library.</div>';
   } else {
@@ -603,10 +625,10 @@ function plAdd(tracks, replace) {
    at a time: when the next song is from the other one, Soranix switches over (about a second)
    and goes on playing there. Opening or editing a list costs no requests. */
 const MIX = { lists: LS.get('mixLists', []), handing: false };
-const svcOfRow = t => (/^ytm:/.test(t?.uri || '') ? 'yt' : 'sp');
+// (svcOfRow, the service of a row, is in ytm.js)
 const mixSave = () => { LS.set('mixLists', MIX.lists); if (isShown('mx')) renderMyLists(); };
 const mixById = id => MIX.lists.find(l => l.id === id);
-const mixSong = t => ({ type: 'track', uri: t.uri, id: t.id, name: t.name, artist: t.artist, artists: t.artists, album: t.album, albumId: t.albumId, dur: t.dur, img: t.img, imgLarge: t.imgLarge, mvt: t.mvt, mix: true });
+const mixSong = t => ({ type: 'track', uri: t.uri, id: t.id, url: t.url, name: t.name, artist: t.artist, artists: t.artists, album: t.album, albumId: t.albumId, dur: t.dur, img: t.img, imgLarge: t.imgLarge, mvt: t.mvt, mix: true });
 function mixTreeNodes() {
   return [['grp', 'Mixed playlists' + (MIX.lists.length ? ` (${MIX.lists.length})` : '')],
     ...MIX.lists.map(l => ['mix:' + l.id, l.name, 1]), ['mixnew', '+ New mixed playlist', 1]];
@@ -632,9 +654,9 @@ function mixMenu(tracks) {
 }
 function mixOpen(id, push = true) {
   const l = mixById(id); if (!l) return;
-  const n = { sp: 0, yt: 0 }; l.songs.forEach(s => n[svcOfRow(s)]++);
+  const n = { sp: 0, yt: 0, sc: 0 }; l.songs.forEach(s => n[svcOfRow(s)]++);
   setView({ node: 'mix:' + id, mixId: id, kind: 'track', title: l.name, rows: l.songs.map(s => ({ ...s, mix: true })),
-    sub: `${songs(l.songs.length)}: ${n.sp} on Spotify (green), ${n.yt} on YouTube Music (red)`,
+    sub: `${songs(l.songs.length)}: ${n.sp} on Spotify (green), ${n.yt} on YouTube Music (red), ${n.sc} on SoundCloud (orange)`,
     empty: 'Empty. Right-click any song > Add to mixed playlist.',
     actions: [['Rename', () => mixRename(l)], ['Delete', () => mixDelete(l)]] }, push);
 }
@@ -659,10 +681,10 @@ function mixMove(l, t, d) {
 /* the next song is from the other service: switch over and play it there */
 function mixHandoff(i) {
   if (MIX.handing) return; MIX.handing = true;
-  const to = svcOfRow(S.pl[i]) === 'yt' ? 'ytm' : 'spotify';
-  S.plCur = i; LS.set('pl', S.pl);
-  LS.set('mixResume', { i, uri: S.pl[i].uri, at: Date.now() });
-  showMsg(to === 'ytm' ? 'NEXT SONG IS ON YOUTUBE MUSIC - SWITCHING...' : 'NEXT SONG IS ON SPOTIFY - SWITCHING...', 3000);
+  const to = ROW_SVC[svcOfRow(S.now[i])];
+  S.plCur = i; LS.set('pl', S.pl); saveNow();
+  LS.set('mixResume', { i, uri: S.now[i].uri, at: Date.now() });
+  showMsg(`NEXT SONG IS ON ${SVC_NAME[to].toUpperCase()} - SWITCHING...`, 3000);
   try { S.player?.pause?.(); } catch {}
   setTimeout(() => switchService(to), 30);
 }
@@ -671,29 +693,29 @@ function mixResume() {
   const r = LS.get('mixResume'); if (!r) return;
   LS.del('mixResume');
   if (Date.now() - r.at > 60000) return;
-  const i = S.pl[r.i]?.uri === r.uri ? r.i : S.pl.findIndex(x => x.uri === r.uri);
+  const i = S.now[r.i]?.uri === r.uri ? r.i : S.now.findIndex(x => x.uri === r.uri);
   if (i >= 0) { MIX.wait = { uri: r.uri, from: r.at }; playIndex(i); }
 }
 // how long a switch for a mixed playlist took, until the next song really plays (in the log)
 setInterval(() => {
   const w = MIX.wait; if (!w || !S.track || S.paused || S.track.uri !== w.uri || curPos() < 50) return;
   MIX.wait = null;
-  console.log(`[mix] next song playing ${Date.now() - w.from} ms after the switch started (now ${YT.on ? 'YouTube Music' : 'Spotify'})`);
+  console.log(`[mix] next song playing ${Date.now() - w.from} ms after the switch started (now ${YT.on ? W().name : 'Spotify'})`);
 }, 100);
 /* Spotify: its own list only holds the Spotify songs around the playing one; in the last moment
    of the last of those, hand over to the other service for the next song */
 setInterval(() => {
   if (YT.on || MIX.handing || S.paused || !S.track || !S.dur || S.repeat === 2) return;
-  const i = plIndexOfCurrent(); const n = i >= 0 ? S.pl[i + 1] : null;
-  // the YouTube Music window got ready for a song that won't come next after all: close it
-  if (MIX.warm && MIX.warm !== S.track.uri) { MIX.warm = null; window.desktop?.ytm?.('stop'); }
+  const i = plIndexOfCurrent(); const n = i >= 0 ? S.now[i + 1] : null;
+  // the YouTube Music / SoundCloud window got ready for a song that won't come next after all: close it
+  if (MIX.warm && MIX.warm !== S.track.uri) { MIX.warm = null; webCall(MIX.warmSvc, 'stop').catch(() => {}); }
   if (!n || svcOfRow(n) === 'sp') return;
-  const left = S.dur - curPos();
-  // 20 s before the end: YouTube Music loads in the background and gets the next song ready
-  // (silently), so switching over takes a moment instead of a few seconds
-  if (left < 20000 && !MIX.warm && window.desktop?.ytm) {
-    MIX.warm = S.track.uri;
-    ytCall('hello').then(() => ytCall('cue', n.id)).catch(() => {});
+  const left = S.dur - curPos(), to = ROW_SVC[svcOfRow(n)];
+  // 20 s before the end: the other service's window loads in the background and gets the next
+  // song ready (silently), so switching over takes a moment instead of a few seconds
+  if (left < 20000 && !MIX.warm && window.desktop?.[to]) {
+    MIX.warm = S.track.uri; MIX.warmSvc = to;
+    webCall(to, 'hello').then(() => webCall(to, 'cue', n.id, n.url)).catch(() => {});
   }
   // the switch starts just before the end, so it overlaps the song's last moment
   if (left < 900) { MIX.warm = null; mixHandoff(i + 1); }
@@ -716,9 +738,9 @@ function toggleMyLists(on = !isShown('mx')) {
 function renderMyLists() {
   const box = $('#mx-lists'); if (!box) return;
   box.innerHTML = MIX.lists.length ? MIX.lists.map(l => {
-    const n = { sp: 0, yt: 0 }; l.songs.forEach(s => n[svcOfRow(s)]++);
+    const n = { sp: 0, yt: 0, sc: 0 }; l.songs.forEach(s => n[svcOfRow(s)]++);
     return `<div class="mx-list${l.id === MXV.sel ? ' sel' : ''}" data-id="${esc(l.id)}" title="${esc(l.name)}">` +
-      `<span class="n">${esc(l.name)}</span><span class="c"><b class="svc-sp" title="Spotify songs">${n.sp}</b> <b class="svc-yt" title="YouTube Music songs">${n.yt}</b></span></div>`;
+      `<span class="n">${esc(l.name)}</span><span class="c"><b class="svc-sp" title="Spotify songs">${n.sp}</b> <b class="svc-yt" title="YouTube Music songs">${n.yt}</b> <b class="svc-sc" title="SoundCloud songs">${n.sc}</b></span></div>`;
   }).join('') : '<div class="mx-empty">No lists yet.<br>Press New, or Save playlist window.</div>';
   const l = mixById(MXV.sel);
   $('#mx-head').textContent = l ? `${l.name}  \u00B7  ${songs(l.songs.length)}` : '';
@@ -732,7 +754,7 @@ function renderMyLists() {
 function mixToPlaylist(l, play, from = 0) {
   if (!l?.songs.length) return showMsg('THIS LIST IS EMPTY', 1500);
   const rows = l.songs.map(s => ({ ...s }));
-  if (play) { plAdd(rows, true); playIndex(from); } else { const n = plAdd(rows, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO THE PLAYLIST WINDOW`, 2000); }
+  if (play) { plAdd(rows, true); playFromPl(from); } else { const n = plAdd(rows, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO THE PLAYLIST WINDOW`, 2000); }
 }
 async function mixSavePlaylistWindow() {
   if (!S.pl.length) return;
@@ -805,10 +827,11 @@ const mapArtist = a => a && { type: 'artist', uri: a.uri, id: a.id, name: a.name
 const mapAlbum = a => a && { type: 'album', uri: a.uri, id: a.id, name: a.name, artist: (a.artists || []).map(x => x.name).join(', '), year: (a.release_date || '').slice(0, 4), count: a.total_tracks, img: a.images?.at(-1)?.url, imgMid: (a.images?.[1] || a.images?.[0])?.url };
 const mapPlaylist = p => p && { type: 'playlist', uri: p.uri, id: p.id, snapshot: p.snapshot_id, name: p.name, owner: p.owner?.display_name || p.owner?.id || '', ownerId: p.owner?.id, collab: p.collaborative, public: p.public, count: p.items?.total ?? p.tracks?.total ?? '', img: p.images?.at(-1)?.url, imgLarge: p.images?.[0]?.url };
 const COLS = {
-  track: [['#', 'num', (r, i) => i + 1], ['Title', '', r => r.name], ['Artist', '', r => r.artist], ['Album', '', r => r.album], ['Time', 'dur', r => fmt(r.dur)]],
+  track: [['#', 'num', (r, i) => i + 1], ['Title', '', r => r.name], ['Artist', '', r => r.artist], ['Album', '', r => r.album], ['Time', 'dur', r => r.dur ? fmt(r.dur) : '']],
   artist: [['Artist', '', r => r.name], ['Genres', '', r => r.genres]],
   album: [['Album', '', r => r.name], ['Artist', '', r => r.artist], ['Year', 'dur', r => r.year], ['Tracks', 'dur', r => r.count]],
   playlist: [['Playlist', '', r => r.name], ['Owner', '', r => r.owner], ['Tracks', 'dur', r => r.count]],
+  show: [['Podcast', '', r => r.name], ['Publisher', '', r => r.owner], ['Episodes', 'dur', r => r.count]],
 };
 
 function setupLib() {
@@ -989,7 +1012,7 @@ async function loadLib(key, url, pick, map) {
 const loadSavedAlbums = async () => { LIBX.albums = await loadLib('albums', '/me/albums?limit=50', j => j, it => mapAlbum(it.album)); };
 const loadFollowed = async () => { LIBX.artists = await loadLib('artists', '/me/following?type=artist&limit=50', j => j.artists, mapArtist); };
 const loadShows = async () => { LIBX.shows = await loadLib('shows', '/me/shows?limit=50', j => j, it => mapShow(it.show)); };
-const mapShow = s => s && { type: 'show', uri: s.uri, id: s.id, name: s.name, owner: s.publisher || '', img: s.images?.at(-1)?.url };
+const mapShow = s => s && { type: 'show', uri: s.uri, id: s.id, name: s.name, owner: s.publisher || '', img: s.images?.at(-1)?.url, imgLarge: (s.images?.[1] || s.images?.[0])?.url, count: s.total_episodes ?? '' };
 const mapEpisode = (e, show) => e && e.uri ? { type: 'track', uri: e.uri, id: e.id, name: e.name, artist: show?.name || e.show?.name || '', album: e.release_date || '', dur: e.duration_ms, episode: true } : null;
 async function createPlaylist() {
   if (!S.me) return;
@@ -1023,7 +1046,7 @@ function filteredNodes() {
 function renderTree() {
   if (YT.on) return ytRenderTree();
   const nodes = filteredNodes() || [
-    ['grp', 'Find music'], ['search', 'Search Spotify'], ['discover', 'Discover new music'],
+    ['grp', 'Find music'], ['search', 'Search Spotify'], ['discover', 'Discover new music'], ['pdiscover', 'Discover podcasts'],
     ['grp', 'Your library'], ['liked', 'Liked Songs'], ['recent', 'Recently Played'], ['toptracks', 'Your Top Songs'], ['topartists', 'Your Top Artists'], ['savedalbums', 'Saved Albums'],
     ['grp', 'Playlists' + (S.playlists.length ? ` (${S.playlists.length})` : '')],
     ...pinFirst(S.playlists).map(p => ['pl:' + p.id, pinLabel(p), 1]),
@@ -1165,6 +1188,7 @@ async function openNode(id) {
   if (id.startsWith('toptracks')) return openTop('tracks', id.split(':')[1] || 'medium_term');
   if (id.startsWith('topartists')) return openTop('artists', id.split(':')[1] || 'medium_term');
   if (id === 'discover') return openDiscover();
+  if (id === 'pdiscover') return openPodDiscover();
   if (id === 'plrefresh') return refreshPlaylistsNow();
   if (id === 'reconnect') { if (await askReconnect()) login(); return; }
   if (id.startsWith('retry:')) { const k = id.slice(6); LIBX[k] = null; return setFilter(k === 'shows' ? 'podcasts' : k); }
@@ -1253,7 +1277,7 @@ async function artistProfile(id) {
 /* the artist's name from anything already on screen or saved, so it can be searched */
 function knownArtistName(id) {
   const uri = 'spotify:artist:' + id;
-  for (const list of [[S.track], S.pl, L.view?.rows, LIBX.artists, UPN.items, QU.items]) {
+  for (const list of [[S.track], S.pl, S.lib, L.view?.rows, LIBX.artists, UPN.items, QU.items]) {
     for (const r of list || []) {
       if (!r) continue;
       if (r.type === 'artist' && r.id === id) return r.name;
@@ -1315,12 +1339,13 @@ function openAlbum(a, node) {
 function runSearch(q, push = true) {
   q = (q || '').trim(); if (!q) return;
   L.q = q; L.node = 'search'; renderTree();
-  const types = { track: 'Songs', artist: 'Artists', album: 'Albums', playlist: 'Playlists' };
-  const map = { track: t => mapTrack(t), artist: mapArtist, album: mapAlbum, playlist: mapPlaylist }[L.tab];
+  const types = { track: 'Songs', artist: 'Artists', album: 'Albums', playlist: 'Playlists', show: 'Podcasts' };
+  if (!types[L.tab]) L.tab = 'track';
+  const map = { track: t => mapTrack(t), artist: mapArtist, album: mapAlbum, playlist: mapPlaylist, show: mapShow }[L.tab];
   if (!push && L.view) L.view = null;
   return loadPaged({
     kind: L.tab, title: `Search: ${q}`, sub: types[L.tab], tabs: Object.entries(types), cache: DAY,
-  }, `/search?q=${encodeURIComponent(q)}&type=${L.tab}&limit=10`, map, j => j[L.tab + 's'] || { items: [] });
+  }, `/search?q=${encodeURIComponent(q)}&type=${L.tab}&limit=10${L.tab === 'show' ? '&market=from_token' : ''}`, map, j => j[L.tab + 's'] || { items: [] });
 }
 /* Discover new music: shown as a grid of covers. The last mix is kept, so opening it again (and
    at start, where it opens first) costs no requests; New mix makes a fresh one (4 searches). */
@@ -1363,6 +1388,40 @@ async function openDiscover(fresh = false) {
 /* Discover's More: the next 20 songs of the same search (2 requests, 10 songs each: Spotify's
    limit for apps like this), only when pressed. They're added to the kept mix, so they come
    back at the next start without asking again. Spotify's search goes up to 1,000 results. */
+/* Discover podcasts: podcasts on Spotify as a grid of covers, a topic at a time (the buttons above).
+   Spotify no longer lets apps browse its podcast categories, so each topic is a podcast search: 10
+   podcasts per request, kept for 3 days (opening a topic again costs nothing); More adds the next 10.
+   A podcast opens to its episodes. */
+const POD_TOPICS = [['podcast', 'Popular'], ['comedy', 'Comedy'], ['true crime', 'True crime'], ['news', 'News'], ['sports', 'Sports'],
+  ['business', 'Business'], ['health', 'Health'], ['technology', 'Technology'], ['culture', 'Society & culture'], ['history', 'History'],
+  ['education', 'Education'], ['music', 'Music']];
+async function openPodDiscover(topic = LS.get('podTopic', 'podcast'), push = true) {
+  if (!POD_TOPICS.some(t => t[0] === topic)) topic = 'podcast';
+  LS.set('podTopic', topic);
+  const view = { node: 'pdiscover', kind: 'cards', title: 'Discover podcasts', sub: 'Podcasts on Spotify: ' + POD_TOPICS.find(t => t[0] === topic)[1],
+    rows: [], loading: true, tabs: POD_TOPICS, tabKey: topic, onTab: k => openPodDiscover(k, false), empty: 'No podcasts found here right now.' };
+  setView(view, push);
+  const more = { next: 0, done: false, busy: false };
+  const load = async () => {
+    const j = await api(`/search?q=${encodeURIComponent(topic)}&type=show&market=from_token&limit=10&offset=${more.next}`, { cache: 3 * DAY });
+    const items = (j?.shows?.items || []).filter(Boolean);
+    more.next += 10;
+    if (!j?.shows?.next || !items.length) more.done = true;
+    const seen = new Set(view.rows.map(r => r.id));
+    view.rows.push(...items.map(mapShow).filter(s => s && !seen.has(s.id) && seen.add(s.id)));
+  };
+  try { await load(); } catch (e) { view.empty = 'Could not load podcasts: ' + e.message; }
+  view.loading = false;
+  view.canMore = () => !more.done && !more.busy && more.next < 200;
+  view.onMore = async () => {
+    if (!view.canMore()) return;
+    more.busy = true; renderView(); libStatus('Loading more podcasts...');
+    try { await load(); libStatus(''); } catch (e) { libStatus('Could not load more: ' + e.message); }
+    more.busy = false;
+    if (L.view === view) renderView();
+  };
+  if (L.view === view) renderView();
+}
 function discoverMore(view, more) {
   if (!more?.q) return;
   view.canMore = () => !more.done && !more.busy && more.next < 1000;
@@ -1390,11 +1449,11 @@ function activateRow(i) {
     // a song from Search: play it, then a mix of similar music instead of the other results
     if (!YT.on && L.view.tabs && L.view.title?.startsWith('Search') && radioEnabled()) return playWithRadio(r);
     const tracks = L.view.rows.filter(x => x.type === 'track');
-    plAdd(tracks, true);
-    playIndex(tracks.indexOf(r));
+    playList(tracks, tracks.indexOf(r));
   } else if (r.type === 'artist') openArtist(r);
   else if (r.type === 'album') openAlbum(r);
   else if (r.type === 'playlist') openPlaylist(r);
+  else if (r.type === 'show') openShow(r, L.node);
 }
 async function tracksOf(r) {
   if (r.type === 'track') return [r];
@@ -1435,9 +1494,9 @@ async function libSend(replace) {
   if (!tracks.length) return libStatus('No songs Spotify lets this app list there. Try Play instead.');
   const startAt = replace && L.sel.size === 1 && picked[0].type === 'track' ? v.rows.filter(x => x.type === 'track').indexOf(picked[0]) : 0;
   if (replace && L.sel.size === 1 && picked[0].type === 'track') tracks = v.rows.filter(x => x.type === 'track');
-  const n = plAdd(tracks, replace);
-  libStatus(`${replace ? 'Playing' : 'Added'} ${n} song${n === 1 ? '' : 's'}.`);
-  if (replace) playIndex(Math.max(0, startAt));
+  if (replace) { libStatus(`Playing ${songs(tracks.length)}.`); return playList(tracks, startAt); }
+  const n = plAdd(tracks, false);
+  libStatus(`Added ${n} song${n === 1 ? '' : 's'} to the playlist window.`);
 }
 
 /* ------------------------------------------------------------------ windows */
@@ -1536,9 +1595,14 @@ function reportShape() {
 // cheap check a few times a second (windows move, menus open, dialogs appear, sizes change)
 if (window.desktop) setInterval(reportShape, 150);
 function savePos() { LS.set('pos', Object.fromEntries(WINS.map(k => [k, [winEl(k).offsetLeft, winEl(k).offsetTop]]))); reportPlayer(); }
+// the music service of this start, once chosen (windows reopened at start wait for it)
+S.svcChosen = new Promise(r => { S.svcChosenNow = r; });
 function setupWindows() {
+  // (the monitor list arrives a moment after start: anything placed at start waits for it, or it
+  // would land on the main monitor, the only one known until then)
+  S.displaysReady = Promise.resolve();
   if (window.desktop?.getDisplays) {
-    window.desktop.getDisplays().then(d => { S.displays = d; keepVisible(); reportPlayer(); }).catch(() => {});
+    S.displaysReady = window.desktop.getDisplays().then(d => { S.displays = d; keepVisible(); reportPlayer(); }).catch(() => {});
     window.desktop.onDisplays(d => { S.displays = d; keepVisible(); reportPlayer(); });
     setTimeout(() => reportPlayer(), 800);
   }
@@ -1806,8 +1870,8 @@ async function songMenu(e, tracks, src) {
   const artists = one?.artists?.length ? one.artists : one?.artistId ? [{ id: one.artistId, name: one.artist }] : [];
   const items = [
     { label: tracks.length > 1 ? `Play ${songs(tracks.length)}` : 'Play', key: 'Enter', fn: () => {
-      if (src.from === 'pl') return playIndex(src.indices[0]);
-      plAdd(tracks, true); playIndex(0);
+      if (src.from === 'pl') return playFromPl(src.indices[0]);
+      playList(tracks, 0);
     } },
     { label: 'Add to queue', key: 'Q', fn: () => addToQueue(tracks) },
     src.from !== 'pl' && { label: 'Add to Soranix playlist', key: 'E', fn: () => { const n = plAdd(tracks, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO PLAYLIST`); } },
@@ -1823,12 +1887,14 @@ async function songMenu(e, tracks, src) {
     ownPl && { label: 'Remove from this playlist', key: 'Del', fn: () => removeFromSpotifyPlaylist(tracks, ownPl) },
     src.from === 'pl' && { label: 'Remove from Soranix playlist', key: 'Del', fn: plRemove },
     likeItem,
+    // YouTube Music / SoundCloud: their own Liked music / Likes and your playlists there
+    ...(YT.on ? webSongMenuItems(tracks, src) : []),
     '-',
     { label: 'Sleep timer', key: 'T', sub: sleepMenu },
     '-',
     artists.length > 1
-      ? { label: 'Go to artist', key: 'Alt+A', sub: artists.map(a => ({ label: a.name, fn: () => goArtist(a.id) })) }
-      : { label: 'Go to artist', key: 'Alt+A', disabled: !artists[0]?.id, fn: () => goArtist(artists[0].id) },
+      ? { label: 'Go to artist', key: 'Alt+A', sub: artists.map(a => ({ label: a.name, fn: () => (YT.on ? openWebArtist({ name: a.name }) : goArtist(a.id)) })) }
+      : { label: 'Go to artist', key: 'Alt+A', disabled: YT.on ? !artists[0]?.name : !artists[0]?.id, fn: () => (YT.on ? openWebArtist({ name: artists[0].name }) : goArtist(artists[0].id)) },
     { label: 'Go to album', key: 'A', disabled: !one || one.episode, fn: () => goAlbum(one) },
     '-',
     { label: 'Share', key: 'S', disabled: !one, sub: () => [
@@ -1915,7 +1981,7 @@ function mainMenu(e) {
 
 function settingsItems() {
   return [
-    { label: 'Music service: ' + (YT.on ? 'YouTube Music' : 'Spotify'), sub: serviceMenu },
+    { label: 'Music service: ' + (YT.on ? W().name : 'Spotify'), sub: serviceMenu },
     '-',
     { label: 'Always on top', check: LS.get('onTop', false), disabled: !window.desktop?.setOnTop, fn: () => setOnTop(!LS.get('onTop', false)) },
     { label: `Global hotkeys (${keyName(GK.got.toggle) || 'Ctrl+Alt+Space'}, Ctrl+Alt+arrows), also in games`, check: LS.get('globalKeys', false), disabled: !window.desktop?.globalKeys, fn: () => setGlobalKeys(!LS.get('globalKeys', false)) },
@@ -1970,7 +2036,7 @@ function setupKeys() {
     const plFocused = document.activeElement === $('#pllist');
     if (plFocused && (k === 'delete' || k === 'backspace')) { plRemove(); e.preventDefault(); return; }
     if (plFocused && k === 'a' && (e.ctrlKey || e.metaKey)) { S.plSel = new Set(S.pl.map((_, i) => i)); renderPL(false); e.preventDefault(); return; }
-    if (plFocused && k === 'enter' && S.plSel.size) { playIndex(Math.min(...S.plSel)); return; }
+    if (plFocused && k === 'enter' && S.plSel.size) { playFromPl(Math.min(...S.plSel)); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const map = { z: T.prev, x: T.play, c: T.pause, v: T.stop, b: T.next, s: T.shuffle, r: T.repeat, l: T.eject };
     if (map[k]) { map[k](); e.preventDefault(); return; }
@@ -1996,10 +2062,13 @@ async function boot() {
   requestAnimationFrame(frame);
   const p = new URLSearchParams(location.search);
   // Spotify or YouTube Music (coming back from Spotify's login page: Spotify, of course)
+  // (Choose your music opens on the player's monitor: the monitors must be known first)
+  await Promise.race([S.displaysReady, sleep(1500)]);
   const svc = p.has('code') || p.has('error') ? 'spotify' : await chooseService();
+  setTimeout(S.svcChosenNow, 0);   // (YouTube Music / SoundCloud: once ytStart below has begun)
   // (each start shows the windows after its first, instant part: red theme, library, account)
-  if (svc === 'ytm') { const started = ytStart(); reveal(); return started; }
-  window.desktop?.ytm?.('stop');
+  if (WEB[svc]) { const started = ytStart(svc); reveal(); return started; }
+  window.desktop?.ytm?.('stop'); window.desktop?.sc?.('stop');
   if (p.has('code') || p.has('error')) {
     reveal();
     history.replaceState(null, '', REDIRECT);
@@ -2243,7 +2312,7 @@ function renderNowInfo() {
   const t = S.track;
   $('#np-title').textContent = t ? t.name : 'Nothing playing';
   $('#np-artist').innerHTML = t
-    ? t.artists.map(a => `<a class="art-name-link" data-id="${esc(idOf(a.uri))}" title="About ${esc(a.name)}">${esc(a.name)}</a>`).join(', ')
+    ? t.artists.map(a => `<a class="art-name-link" data-id="${esc(idOf(a.uri))}" data-name="${esc(a.name)}" title="About ${esc(a.name)}">${esc(a.name)}</a>`).join(', ')
     : 'Pick a song and press play';
   const imgs = t?.album?.images || [];
   // biggest cover available (the SDK gives sizes as width/height or as SMALL/LARGE)
@@ -2346,7 +2415,7 @@ function playlistMenu(e, p) {
   const items = [
     { label: 'Play', key: 'Enter', fn: async () => {
       if (!canList) return playBody({ context_uri: p.uri });
-      const t = await playlistTracks(p); if (t.length) { plAdd(t, true); playIndex(0); }
+      const t = await playlistTracks(p); if (t.length) playList(t, 0);
     } },
     { label: 'Add to queue', key: 'Q', disabled: !canList, fn: async () => { const t = await playlistTracks(p); if (t.length) addToQueue(t); } },
     { label: 'Add to Soranix playlist', key: 'E', disabled: !canList, fn: async () => { const t = await playlistTracks(p); const n = plAdd(t, false); showMsg(`ADDED ${songs(n).toUpperCase()}`); } },
@@ -2405,7 +2474,7 @@ function winDialog({ title = 'SORANIX', message = '', fields = [], ok = 'OK', ca
         `${image.url ? `<img src="${esc(image.url)}" alt="">` : '<img alt="" style="display:none">'}` +
         `<span class="dlg-imgtxt">\u270E Choose photo</span></div><div class="dlg-fields">` : '') +
       fields.map((f, i) => `<label class="dlg-f">${f.label ? `<span>${esc(f.label)}</span>` : ''}` +
-        `<input data-i="${i}" value="${esc(f.value || '')}" placeholder="${esc(f.placeholder || '')}" spellcheck="false" autocomplete="off"></label>`).join('') +
+        `<input data-i="${i}"${f.type ? ` type="${esc(f.type)}"` : ''} value="${esc(f.value || '')}" placeholder="${esc(f.placeholder || '')}" spellcheck="false" autocomplete="off"></label>`).join('') +
       (image ? `</div></div><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-file hidden>` : '') +
       (note ? `<div class="dlg-note">${esc(note)}</div>` : '') +
       `<div class="dlg-btns">${cancel ? `<button class="btn" data-c>${esc(cancel)}</button>` : ''}` +
@@ -2520,11 +2589,14 @@ async function externalArtistFetch(a) {
   const out = { mb: null, links: [], wiki: null };
   try {
     let mbid = null;
-    try {
-      const u = await mbGet('url?resource=' + encodeURIComponent('https://open.spotify.com/artist/' + a.id) + '&inc=artist-rels');
-      mbid = (u.relations || []).find(r => r.artist)?.artist?.id || null;
-    } catch {}
-    await sleep(1100); // MusicBrainz asks for at most one request per second
+    // (a Spotify artist is found by its Spotify link; a YouTube Music / SoundCloud one by its name)
+    if (a.spotify !== false) {
+      try {
+        const u = await mbGet('url?resource=' + encodeURIComponent('https://open.spotify.com/artist/' + a.id) + '&inc=artist-rels');
+        mbid = (u.relations || []).find(r => r.artist)?.artist?.id || null;
+      } catch {}
+      await sleep(1100); // MusicBrainz asks for at most one request per second
+    }
     if (!mbid) {
       const q = await mbGet('artist?query=' + encodeURIComponent(`artist:"${a.name}"`) + '&limit=5');
       mbid = (q.artists || []).find(x => x.score >= 95 && x.name.toLowerCase() === a.name.toLowerCase())?.id || null;
@@ -2555,7 +2627,9 @@ async function externalArtistFetch(a) {
     if (r.ok) {
       const j = await r.json();
       if (j.type !== 'disambiguation' && j.extract && (trusted || MUSIC_RE.test((j.description || '') + ' ' + j.extract.slice(0, 300)))) {
-        out.wiki = { text: j.extract, url: j.content_urls?.desktop?.page, lang };
+        const ow = j.originalimage?.width || 0, thumb = j.thumbnail?.source || '';
+        const img = ow > 800 && /\/\d+px-/.test(thumb) ? thumb.replace(/\/\d+px-/, '/800px-') : j.originalimage?.source || thumb;   // (800 px: the original can be huge)
+        out.wiki = { text: j.extract, url: j.content_urls?.desktop?.page, lang, img: img || '' };
         if (!out.links.some(l => l.kind === 'Wikipedia') && out.wiki.url) out.links.push({ kind: 'Wikipedia', url: out.wiki.url });
       }
     }
@@ -2666,8 +2740,12 @@ async function openArtistInfo(id) {
 }
 function setupArtistWindow() {
   // it was open: open it again on the same artist (its details are kept for a week: no requests)
-  if (LS.get('shown', {}).art && LS.get('artLast')) { winEl('art').classList.add('hidden'); setTimeout(() => openArtistInfo(LS.get('artLast')), 0); }
-  $('#np-artist').addEventListener('click', e => { const a = e.target.closest('.art-name-link'); if (a) openArtistInfo(a.dataset.id); });
+  // (once it's known which service plays: a YouTube Music / SoundCloud artist is shown by name)
+  if (LS.get('shown', {}).art) {
+    winEl('art').classList.add('hidden');
+    S.svcChosen.then(() => { if (YT.on) { const w = LS.get('artLastWeb'); if (w?.name) openWebArtist(w); } else if (LS.get('artLast')) openArtistInfo(LS.get('artLast')); });
+  }
+  $('#np-artist').addEventListener('click', e => { const a = e.target.closest('.art-name-link'); if (!a) return; YT.on ? openWebArtist({ name: a.dataset.name }) : openArtistInfo(a.dataset.id); });
 }
 
 /* ------------------------------------------------------------------ smart placement for pop-up windows
@@ -3178,11 +3256,12 @@ function localUpNext() {
   if (!S.track) return QU.items.slice();   // nothing playing here: only what you queued
   if (S.shuffle) return null;
   // (YouTube Music: while a queued song plays, the playlist goes on after the song before it)
-  const i = plIndexOfCurrent() >= 0 ? plIndexOfCurrent() : YT.on && S.pl[S.plCur] ? S.plCur : -1; if (i < 0) return null;
+  const i = plIndexOfCurrent() >= 0 ? plIndexOfCurrent() : YT.on && S.now[S.plCur] ? S.plCur : -1; if (i < 0) return null;
   // only songs of the service you're on (a mixed playlist's others play after a switch)
-  const mine = t => svcOfRow(t) === (YT.on ? 'yt' : 'sp');
-  const rest = S.pl.slice(i + 1).filter(mine).slice(0, 30);
-  if (S.repeat === 1 && rest.length < 30) rest.push(...S.pl.slice(0, i + 1).filter(mine).slice(0, 30 - rest.length));
+  // (SoundCloud Go+ songs, which are skipped, aren't coming up)
+  const mine = t => svcOfRow(t) === curRow() && !(t.mvt === 'SNIP' && svcOfRow(t) === 'sc');
+  const rest = S.now.slice(i + 1).filter(mine).slice(0, 30);
+  if (S.repeat === 1 && rest.length < 30) rest.push(...S.now.slice(0, i + 1).filter(mine).slice(0, 30 - rest.length));
   return [...QU.items.filter(mine), ...rest];
 }
 async function loadUpNext(fromSpotify = false) {
@@ -3234,7 +3313,7 @@ function renderUpNext() {
    order); otherwise skip forward to it. */
 async function jumpUpNext(i) {
   const t = UPN.items[i]; if (!t || !ready()) return;
-  const k = S.pl.findIndex(x => x.uri === t.uri);
+  const k = S.now.findIndex(x => x.uri === t.uri);
   if (k >= 0) return playIndex(k);
   showMsg('SKIPPING TO ' + t.name.toUpperCase(), 2000);
   for (let n = 0; n <= i; n++) { await S.player.nextTrack(); await sleep(250); }
@@ -3272,7 +3351,7 @@ const QU = { items: LS.get('myQueue', []) };
 const songKey = t => ((t?.name || '') + '|' + ((t?.artist || t?.artists?.[0]?.name || '').split(',')[0])).toLowerCase().trim();
 const sameSong = (a, b) => !!a && !!b && (a.uri === b.uri || (b.linked_from?.uri && a.uri === b.linked_from.uri) || songKey(a) === songKey(b));
 // (YouTube Music mode has a queue of its own: the two never mix)
-function saveQueue() { LS.set(YT.on ? 'myQueueYT' : 'myQueue', QU.items); }
+function saveQueue() { LS.set(YT.on ? W().queue : 'myQueue', QU.items); }
 function queuePlayed(t) {
   if (!t) return;
   const i = QU.items.findIndex(x => sameSong(x, { ...t, artist: t.artists?.map(a => a.name).join(', ') }));
@@ -3333,7 +3412,8 @@ function setupQueueWin() {
     QU.items = []; saveQueue(); renderQueue();
   };
   renderQueue();
-  if (LS.get('shown', {}).qu) { winEl('qu').classList.add('hidden'); toggleQueueWin(true); } // was open last time
+  // was open last time: opened again once the monitors are known (where it was, on its own monitor)
+  if (LS.get('shown', {}).qu) { winEl('qu').classList.add('hidden'); Promise.race([S.displaysReady, sleep(1500)]).then(() => toggleQueueWin(true)); }
 }
 
 /* ------------------------------------------------------------------ mini mode
@@ -3408,7 +3488,7 @@ function notePlayContext(s, t) {
 function countPlayTick() {
   const c = PLAYS.cur;
   if (!c || c.counted || !S.track || S.track.uri !== c.uri || S.paused || curPos() < 30000) return;
-  const ctx = c.ctx || S.pl.find(x => x.uri === c.uri)?.ctx || '';
+  const ctx = c.ctx || S.now.find(x => x.uri === c.uri)?.ctx || '';
   const m = /^spotify:playlist:(\w+)$/.exec(ctx);
   c.counted = true;
   if (!m) return;
@@ -3899,10 +3979,10 @@ async function buildMix(cur) {
   // a few songs you already like by these artists
   out.push(...shuffleArr((await likedBy([seedName, ...pool])).filter(ok)).slice(0, 3));
   const uniq = out.filter(t => { const k = songKey(t); if (RADIO.seen.has(k)) return false; RADIO.seen.add(k); return true; });
-  return spreadArtists(uniq, S.pl.slice(-4));
+  return spreadArtists(uniq, S.now.slice(-4));
 }
 async function playWithRadio(r) {
-  plAdd([r], true);
+  S.src = 'lib'; S.lib = [{ ...r }]; saveNow(); renderPL(false);
   Object.assign(RADIO, { on: true, seen: new Set([songKey(r)]), seed: primaryArtist(r), seedTrack: r, down: {}, last: null });
   extendRadio(r, true);            // start building the mix while the song starts
   await playIndex(0);
@@ -3914,7 +3994,7 @@ async function extendRadio(cur, now) {
     const mix = await buildMix(cur);
     if (!RADIO.on) return;
     if (!mix.length) return showMsg('NO SIMILAR MUSIC FOUND FOR THIS SONG', 2500);
-    S.pl.push(...mix); renderPL();
+    S.now.push(...mix); saveNow();
     // Spotify hears about the new songs at the end of the song that's playing (see radioHandover):
     // handing it a new list restarts playback, which in the middle of a song is an audible stutter
     RADIO.resync = true;
@@ -3927,16 +4007,16 @@ async function extendRadio(cur, now) {
 setInterval(() => {
   if (!RADIO.on || !RADIO.resync || RADIO.syncing || S.paused || !S.track || !S.dur) return;
   if (S.dur - curPos() > 900) return;
-  const i = plIndexOfCurrent(); if (i < 0 || i + 1 >= S.pl.length) return;
+  const i = plIndexOfCurrent(); if (i < 0 || i + 1 >= S.now.length) return;
   RADIO.syncing = true;
   Promise.resolve(playIndex(i + 1)).finally(() => { RADIO.syncing = false; upNextSoon(1500); });
 }, 250);
 /* skipped twice: take that artist's remaining songs out of this mix */
 function dropUpcoming(artist, from) {
   const k = norm(artist);
-  const before = S.pl.length;
-  S.pl = S.pl.filter((t, n) => n <= from || norm(primaryArtist(t)) !== k);
-  if (S.pl.length !== before) { renderPL(); RADIO.resync = true; RADIO.now = true; }
+  const before = S.now.length;
+  S.now = S.now.filter((t, n) => n <= from || norm(primaryArtist(t)) !== k);
+  if (S.now.length !== before) { saveNow(); renderPL(false); RADIO.resync = true; RADIO.now = true; }
 }
 function radioTick(changed, paused) {
   const i = plIndexOfCurrent();
@@ -3949,13 +4029,13 @@ function radioTick(changed, paused) {
   }
   if (i < 0) {
     // the mix wasn't handed over in time and Spotify went on to something of its own: back to the mix
-    if (changed && RADIO.resync && RADIO.idx >= 0 && RADIO.idx + 1 < S.pl.length && !RADIO.syncing) { RADIO.resync = false; playIndex(RADIO.idx + 1); return; }
+    if (changed && RADIO.resync && RADIO.idx >= 0 && RADIO.idx + 1 < S.now.length && !RADIO.syncing) { RADIO.resync = false; playIndex(RADIO.idx + 1); return; }
     if (changed) RADIO.on = false; return;   // something else is playing now
   }
   RADIO.idx = i;
-  if (changed) notePlayed(S.pl[i]);
-  RADIO.last = { artist: primaryArtist(S.pl[i]), pos: curPos(), dur: S.dur, inMix: i > 0 };
-  if (changed && i >= S.pl.length - 3) extendRadio(S.pl[i], false);
+  if (changed) notePlayed(S.now[i]);
+  RADIO.last = { artist: primaryArtist(S.now[i]), pos: curPos(), dur: S.dur, inMix: i > 0 };
+  if (changed && i >= S.now.length - 3) extendRadio(S.now[i], false);
 }
 
 /* ------------------------------------------------------------------ saved answers

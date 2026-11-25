@@ -48,9 +48,11 @@ if (!window.__sx) window.__sx = (() => {
     const album = runs.find(x => /ALBUM/.test(pageType(x)))?.text || '';
     const durText = txt(r.fixedColumns?.[0]?.musicResponsiveListItemFixedColumnRenderer?.text) || runs.map(x => x.text).find(t => /^\d+:\d\d(:\d\d)?$/.test(t.trim())) || '';
     if (!artists.length) {
-      // search results: "Song • Artist • Album • 3:21"
+      // search results: "Song • Artist • Album • 3:21" (an episode: "Episode • Apr 13, 2025 • Show");
+      // skip the type, lengths, dates, and view / play counts
       const parts = runs.map(x => x.text).join('').split(' • ').map(s => s.trim()).filter(Boolean);
-      const a = parts.find(p => !/^(song|video|episode)$/i.test(p) && !/^\d+:\d\d/.test(p));
+      const a = parts.find(p => !/^(song|video|episode|podcast|playlist|album|single|ep|artist)$/i.test(p) && !/^\d+:\d\d/.test(p)
+        && !/\b(views?|plays?|subscribers?|listeners?|songs?|episodes?)$/i.test(p) && !/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(p) && !/^\d{4}$/.test(p) && !/\bago$/i.test(p));
       if (a) artists = [a];
     }
     const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
@@ -168,6 +170,22 @@ if (!window.__sx) window.__sx = (() => {
           out.push({ ...s, type: s.type || 'MUSIC_VIDEO_TYPE_ATV', kind: 'track' });
         }
       }
+      // "All" lists songs and videos without their length or album (and episodes with a date where
+      // the artist goes): one more request gets all of those for the whole list at once
+      const miss = out.filter(s => s.kind === 'track' && (!s.dur || !s.album)).slice(0, 60);
+      if (miss.length) {
+        try {
+          const info = new Map(walk(await call('music/get_queue', { videoIds: miss.map(s => s.videoId) }), 'playlistPanelVideoRenderer').map(p => [p.videoId, p]));
+          for (const s of miss) {
+            const p = info.get(s.videoId); if (!p) continue;
+            const by = p.longBylineText?.runs || [];
+            s.dur = s.dur || toMs(txt(p.lengthText));
+            s.album = s.album || by.find(x => /ALBUM/.test(pageType(x)))?.text || '';
+            const who = by.filter(x => /ARTIST|USER_CHANNEL|PODCAST/.test(pageType(x))).map(x => x.text);
+            if (who.length) s.artists = who;
+          }
+        } catch {}
+      }
       return out.slice(0, 60);
     },
     // YouTube Music's home page, the way its Discover view (and Limusic's) shows it: shelves like
@@ -219,6 +237,14 @@ if (!window.__sx) window.__sx = (() => {
       }).filter(p => p && p.id !== 'LM' && p.id !== 'SE');
     },
     async playlist(id) { return songs(await call('browse', { browseId: 'VL' + String(id) })); },
+    // Liked music and your playlists: the same requests the website's own buttons send
+    async like(ids) { for (const id of ids || []) await call('like/like', { target: { videoId: String(id) } }); return true; },
+    async unlike(ids) { for (const id of ids || []) await call('like/removelike', { target: { videoId: String(id) } }); return true; },
+    async addToPlaylist(pid, ids) {
+      const j = await call('browse/edit_playlist', { playlistId: String(pid), actions: (ids || []).map(v => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: String(v), dedupeOption: 'DEDUPE_OPTION_SKIP' })) });
+      if (j?.status && j.status !== 'STATUS_SUCCEEDED') throw new Error('YouTube Music did not add them (' + String(j.status).replace(/^STATUS_/, '').toLowerCase() + ')');
+      return true;
+    },
   };
 })();
 true;

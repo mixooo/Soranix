@@ -435,7 +435,7 @@ app.whenReady().then(async () => {
   app.on('before-quit', () => { quitting = true; });
   const YTM_URL = 'https://music.youtube.com/';
   const YTM_BRIDGE = fs.readFileSync(path.join(ROOT, 'ytm-bridge.js'), 'utf8');
-  const YTM_CALLS = new Set(['hello', 'state', 'play', 'pause', 'seek', 'vol', 'next', 'prev', 'load', 'search', 'liked', 'playlists', 'playlist', 'frame', 'videoFor', 'songFor', 'account', 'find', 'album', 'artist', 'home', 'shelfMore', 'history', 'cue']);
+  const YTM_CALLS = new Set(['hello', 'state', 'play', 'pause', 'seek', 'vol', 'next', 'prev', 'load', 'search', 'liked', 'playlists', 'playlist', 'frame', 'videoFor', 'songFor', 'account', 'find', 'album', 'artist', 'home', 'shelfMore', 'history', 'cue', 'like', 'unlike', 'addToPlaylist']);
   function ytmWindow() {
     if (ytm && !ytm.isDestroyed()) return ytm;
     const ses = session.fromPartition('persist:ytm');
@@ -507,6 +507,215 @@ app.whenReady().then(async () => {
     }
     await w.webContents.executeJavaScript(YTM_BRIDGE);
     return w.webContents.executeJavaScript(`window.__sx.${fn}(...${JSON.stringify(Array.isArray(args) ? args : [])})`);
+  });
+
+  // ---------------------------------------------------------------- SoundCloud (test)
+  // Like Aurora: Soranix asks SoundCloud's web API itself (api-v2.soundcloud.com, the API the
+  // site's own player uses), with the site's public client id, and plays SoundCloud's own stream
+  // links in its player (see ytm.js). You sign in with an authorized token from your own browser
+  // (library > Sign in with authorized token): SoundCloud's own sign-in refuses browsers built
+  // into apps. A SoundCloud browser window only opens for SoundCloud's human check; its session
+  // keeps the SoundCloud login (and the check's pass) apart from everything else.
+  let scw = null;
+  const SC_URL = 'https://soundcloud.com/';
+  const SC_WEB = 'https://soundcloud.com', SC_API = 'https://api-v2.soundcloud.com';
+  // a desktop Chrome (the mobile site's page carries no list of scripts to find the client id in)
+  const SC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+  const SC_VERIFY = 'SoundCloud wants to check that you are human: open Verify SoundCloud in the library and pass its check.';
+  function scWindow() {
+    if (scw && !scw.isDestroyed()) return scw;
+    const ses = session.fromPartition('persist:sc');
+    // a plain Chrome, which is what this is (only the app's name is left out)
+    ses.setUserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
+    scw = new BrowserWindow({
+      width: 1100, height: 760, show: false, title: 'Soranix - SoundCloud', icon: ICON, autoHideMenuBar: true,
+      webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    scw.on('close', e => { if (!quitting) { e.preventDefault(); scw.hide(); } }); // closing just hides it
+    scw.webContents.setWindowOpenHandler(({ url }) => { openLink(url); return { action: 'deny' }; });
+    return scw;
+  }
+  ipcMain.handle('sc', async (_e, fn) => {
+    if (fn === 'stop') { if (scw && !scw.isDestroyed()) scw.destroy(); scw = null; return true; }
+    // log out: your login (and everything else the SoundCloud session keeps) is cleared
+    if (fn === 'logout') { await session.fromPartition('persist:sc').clearStorageData(); return true; }
+    const w = scWindow();
+    if (fn === 'show') { w.show(); w.focus(); return true; }
+    if (fn === 'hide') { w.hide(); return true; }
+    // SoundCloud's human check: its page, shown, so you can pass the check yourself
+    if (fn === 'verify') { w.loadURL(SC_URL); w.show(); w.focus(); return true; }
+    throw new Error('unknown SoundCloud call');
+  });
+
+  // ---- SoundCloud's web API, asked from here (like Aurora's own HTTP client)
+  const scSes = () => session.fromPartition('persist:sc');
+  const SC_ID_FILE = path.join(app.getPath('userData'), 'soundcloud-client.json');
+  let scCid = '';
+  async function scText(url, headers = {}) {
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
+    if (!r.ok) throw new Error(`SoundCloud request failed (${r.status}). Try again later.`);
+    return r.text();
+  }
+  // the client id: in one of the last scripts soundcloud.com loads; kept, and found again when it stops working
+  async function scClientId(fresh) {
+    if (!fresh && !scCid) { try { scCid = JSON.parse(fs.readFileSync(SC_ID_FILE, 'utf8')).id || ''; } catch {} }
+    if (!fresh && scCid) return scCid;
+    const page = await scText(SC_WEB, { 'User-Agent': SC_UA });
+    const scripts = [...page.matchAll(/https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js/g)].map(m => m[0]).reverse();
+    for (const s of scripts) {
+      const m = /client_id[:=]"?([a-zA-Z0-9]{32})/.exec(await scText(s, { 'User-Agent': SC_UA }));
+      if (m) { scCid = m[1]; try { fs.writeFileSync(SC_ID_FILE, JSON.stringify({ id: scCid })); } catch {} return scCid; }
+    }
+    throw new Error('Could not reach SoundCloud. Please retry.');
+  }
+  // your SoundCloud login (from signing in in the SoundCloud window) and the human check's pass
+  async function scCookies() {
+    const out = {};
+    for (const c of await scSes().cookies.get({ url: SC_WEB })) out[c.name] = c;
+    return out;
+  }
+  const scTokenExp = tok => { try { return JSON.parse(Buffer.from(tok.split('.')[1], 'base64url').toString()).exp || 0; } catch { return 0; } };
+  // the login lasts a day; the site swaps its refresh cookie for a new one the same way
+  async function scRefresh() {
+    const c = await scCookies();
+    if (!c.oauth_token) return false;
+    const r = await fetch(SC_WEB + '/n/api/refresh-token', { method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { Cookie: Object.values(c).map(x => `${x.name}=${x.value}`).join('; '), Origin: SC_WEB, Referer: SC_WEB + '/', 'User-Agent': SC_UA } }).catch(() => null);
+    if (!r?.ok) return false;
+    for (const h of r.headers.getSetCookie?.() || []) {
+      const [pair, ...attrs] = h.split(';'), i = pair.indexOf('='); if (i < 1) continue;
+      const name = pair.slice(0, i).trim(), value = pair.slice(i + 1).trim();
+      const was = c[name], gone = !value || /max-age=0/i.test(attrs.join(';'));
+      if (gone) await scSes().cookies.remove(SC_WEB, name).catch(() => {});
+      else await scSes().cookies.set({ url: SC_WEB, name, value, domain: was?.domain, path: was?.path || '/', secure: true, httpOnly: was?.httpOnly ?? true,
+        expirationDate: Math.floor(Date.now() / 1000) + 30 * 86400 }).catch(() => {});
+    }
+    return true;
+  }
+  const scGet = (pathOrUrl, retry = false) => scReq('GET', pathOrUrl, null, retry);
+  async function scReq(method, pathOrUrl, body = null, retry = false) {
+    const u = new URL(String(pathOrUrl).startsWith('https://') ? pathOrUrl : SC_API + pathOrUrl);
+    if (u.origin !== SC_API) throw new Error('not a SoundCloud address');
+    u.searchParams.set('client_id', await scClientId(retry));
+    let c = await scCookies();
+    // (renewed only when it says it runs out within 5 minutes; a login without a date isn't renewed ahead)
+    const exp = c.oauth_token ? scTokenExp(c.oauth_token.value) : 0;
+    if (exp && exp - Date.now() / 1000 < 300) { await scRefresh(); c = await scCookies(); }
+    const headers = { Accept: 'application/json', Origin: SC_WEB, Referer: SC_WEB + '/', 'User-Agent': SC_UA };
+    if (body) headers['Content-Type'] = 'application/json';
+    if (c.oauth_token) headers.Authorization = 'OAuth ' + c.oauth_token.value;
+    if (c.datadome) headers.Cookie = 'datadome=' + c.datadome.value;   // (a passed human check counts)
+    let r;
+    try { r = await fetch(u, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }); }
+    catch { throw new Error('Could not connect to SoundCloud. Please retry.'); }
+    const text = await r.text();
+    if (r.status === 403 && /captcha-delivery\.com/.test(text)) throw new Error(SC_VERIFY);
+    // a stale client id is refused like a bad login: once more with a fresh id (and a fresh login)
+    if ((r.status === 401 || r.status === 403) && !retry) { if (r.status === 401 && c.oauth_token) await scRefresh(); return scReq(method, pathOrUrl, body, true); }
+    if (r.status === 401) throw new Error(c.oauth_token ? 'Your SoundCloud login ran out: use Sign in with authorized token again (library).' : 'Sign in to SoundCloud to do this.');
+    if (r.status === 403) throw new Error('SoundCloud did not allow this request. Please try again.');
+    if (r.status === 404) throw new Error('SoundCloud could not find this.');
+    if (!r.ok) throw new Error(`SoundCloud request failed (${r.status}). Try again later.`);
+    return text ? JSON.parse(text) : null;
+  }
+  // what Soranix gets: songs in the same shape as from YouTube Music
+  const scPath = url => { try { return new URL(url).pathname.replace(/\/$/, ''); } catch { return ''; } };
+  const scArt = (u, size) => String(u || '').replace(/-(large|t\d+x\d+|crop|original)\.(jpg|png)/, `-${size}.$2`);
+  const scList = j => (Array.isArray(j) ? j : j?.collection || []);
+  function scSong(a) {
+    if (!a || a.kind !== 'track' || a.policy === 'BLOCK') return null;
+    const pm = a.publisher_metadata || {}, user = a.user || {}, cover = a.artwork_url || user.avatar_url || '';
+    return { kind: 'track', videoId: String(a.id), url: scPath(a.permalink_url), type: a.policy === 'SNIP' ? 'SNIP' : '',
+      title: a.title || '', artists: [pm.artist || user.username || ''].filter(Boolean), album: pm.album_title || '',
+      dur: a.full_duration || a.duration || 0, img: scArt(cover, 't67x67'), imgLarge: scArt(cover, 't500x500') };
+  }
+  function scCard(a) {
+    if (!a) return null;
+    if (a.kind === 'track') return scSong(a);
+    const pic = a.artwork_url || a.avatar_url || a.calculated_artwork_url || a.user?.avatar_url, img = scArt(pic, 't200x200'), imgLarge = scArt(pic, 't500x500');
+    if (a.kind === 'user') return { type: 'artist', id: scPath(a.permalink_url), name: a.username || a.full_name || '', sub: [a.city, a.followers_count != null ? `${Number(a.followers_count).toLocaleString('en')} followers` : ''].filter(Boolean).join(' • '), img, imgLarge };
+    if (/playlist/.test(a.kind || '')) {
+      const album = /album|ep|single|compilation/i.test(a.set_type || '');
+      return { type: album ? 'album' : 'playlist', id: a.kind === 'system-playlist' && a.urn ? 'urn:' + a.urn : scPath(a.permalink_url), name: a.title || a.short_title || '',
+        sub: [album ? 'Album' : 'Playlist', a.user?.username || a.made_for?.username || '', a.release_date ? String(a.release_date).slice(0, 4) : a.track_count ? `${a.track_count} songs` : ''].filter(Boolean).join(' • '), img, imgLarge };
+    }
+    return null;
+  }
+  // a playlist's songs come partly as bare ids: the rest are asked for, 50 at a time
+  async function scFullTracks(tracks) {
+    const have = new Map(tracks.filter(t => t?.title).map(t => [String(t.id), t]));
+    const need = tracks.filter(t => t && !t.title).map(t => String(t.id));
+    for (let i = 0; i < need.length && i < 500; i += 50) for (const t of scList(await scGet('/tracks?ids=' + need.slice(i, i + 50).join(',')))) have.set(String(t.id), t);
+    return tracks.map(t => have.get(String(t?.id))).map(scSong).filter(Boolean);
+  }
+  const scResolve = p => scGet('/resolve?url=' + encodeURIComponent(SC_WEB + String(p)));
+  const SC_FN = {
+    async signedIn() { return !!(await scCookies()).oauth_token; },
+    // your login, pasted from your own browser (Firefox / Chrome: the soundcloud.com cookie
+    // "oauth_token"), for when SoundCloud's sign-in refuses Soranix's built-in browser. Kept in the
+    // SoundCloud session like a sign-in there, and checked with SoundCloud right away.
+    async setLogin(value) {
+      let v = String(value || '').trim().replace(/^oauth_token\s*[=:]\s*/i, '').replace(/^["']|["']$/g, '');
+      if (!/^[\w.\-~+/=]{20,4096}$/.test(v)) throw new Error('That doesn\'t look like the oauth_token value. Copy only its Value.');
+      const exp = scTokenExp(v), ses = scSes();
+      await ses.cookies.set({ url: SC_WEB, name: 'oauth_token', value: v, domain: '.soundcloud.com', path: '/', secure: true,
+        expirationDate: exp > Date.now() / 1000 ? exp : Math.floor(Date.now() / 1000) + 86400 });
+      try { const me = await scGet('/me'); return { name: me.username || me.full_name || '', handle: me.permalink ? '@' + me.permalink : '' }; }
+      catch (e) {
+        await ses.cookies.remove(SC_WEB, 'oauth_token').catch(() => {});
+        throw new Error(/ran out|Sign in/.test(e.message) ? 'SoundCloud didn\'t accept that login (it may have run out): copy it again from your browser.' : e.message);
+      }
+    },
+    // a small question, to see whether SoundCloud answers again (after its human check)
+    async ping() { await scGet('/search/tracks?q=a&limit=1'); return true; },
+    async find(q, filter) {
+      const p = { songs: '/search/tracks', artists: '/search/users', albums: '/search/albums', playlists: '/search/playlists_without_albums' }[filter] || '/search';
+      return scList(await scGet(`${p}?q=${encodeURIComponent(String(q))}&limit=40`)).map(scCard).filter(Boolean).slice(0, 60);
+    },
+    // Discover: the sections of SoundCloud's Discover page (its "mixed selections")
+    async home() {
+      return scList(await scGet('/mixed-selections?limit=12')).map(s => ({ title: s.title || s.short_title || '', items: scList(s.items).map(scCard).filter(Boolean), more: null }))
+        .filter(s => s.title && s.items.length);
+    },
+    async playlist(id) {
+      const pl = String(id).startsWith('urn:') ? await scGet('/system-playlists/' + encodeURIComponent(String(id).slice(4))) : await scResolve(id);
+      return scFullTracks(pl?.tracks || []);
+    },
+    async album(id) { return SC_FN.playlist(id); },
+    async artist(p) { const u = await scResolve(p); return scList(await scGet(`/users/${u.id}/toptracks?limit=50`)).map(scSong).filter(Boolean); },
+    async liked() { const me = await scGet('/me'); return scList(await scGet(`/users/${me.id}/track_likes?limit=200`)).map(x => scSong(x.track)).filter(Boolean); },
+    async playlists() {
+      return scList(await scGet('/me/library/all?limit=50')).map(x => scCard(x.playlist || x.system_playlist)).filter(Boolean).map(p => ({ id: p.id, name: p.name, sub: p.sub, img: p.img }));
+    },
+    // your Likes and your playlists (signed in): what SoundCloud's own buttons do
+    async like(ids) { const me = await scGet('/me'); for (const id of ids || []) await scReq('PUT', `/users/${me.id}/track_likes/${encodeURIComponent(String(id))}`); return true; },
+    async unlike(ids) { const me = await scGet('/me'); for (const id of ids || []) await scReq('DELETE', `/users/${me.id}/track_likes/${encodeURIComponent(String(id))}`); return true; },
+    async addToPlaylist(id, ids) {
+      if (String(id).startsWith('urn:')) throw new Error('SoundCloud\'s own mixes can\'t be changed');
+      const pl = await scResolve(id), me = await scGet('/me');
+      if (String(pl?.user_id ?? pl?.user?.id) !== String(me.id)) throw new Error('you can only add songs to your own playlists');
+      const have = (pl.tracks || []).map(t => Number(t.id)), add = (ids || []).map(Number).filter(n => n && !have.includes(n));
+      if (!add.length) return true;
+      await scReq('PUT', `/playlists/${pl.id}`, { playlist: { tracks: [...have, ...add] } });
+      return true;
+    },
+    async account() { if (!(await scCookies()).oauth_token) return null; const a = await scGet('/me'); return { name: a.username || a.full_name || '', handle: a.permalink ? '@' + a.permalink : '' }; },
+    // a song's stream: SoundCloud's signed link to it (HLS or a plain file), like Aurora; previews
+    // (Go+ songs) and encrypted streams can't be played here
+    async stream(id) {
+      const t = await scGet('/tracks/' + encodeURIComponent(String(id)));
+      const all = t?.media?.transcodings || [];
+      const ok = all.filter(x => !x.snipped && x.url && ['hls', 'progressive'].includes(x.format?.protocol) && !/ogg|opus/i.test(x.format?.mime_type || ''));
+      const pick = ok.find(x => x.format.protocol === 'progressive') || ok[0];
+      if (!pick) throw new Error(all.some(x => x.snipped) || t?.policy === 'SNIP' ? 'Go+ only - skipped' : 'SoundCloud only streams this song encrypted (Go+) - skipped');
+      const s = await scGet(pick.url + (pick.url.includes('?') ? '&' : '?') + 'track_authorization=' + encodeURIComponent(t.track_authorization || ''));
+      if (!/^https:\/\//.test(s?.url || '')) throw new Error('SoundCloud gave no stream for this song');
+      return { url: s.url, hls: pick.format.protocol === 'hls', track: scSong(t) };
+    },
+  };
+  ipcMain.handle('scapi', async (_e, fn, args) => {
+    if (!Object.hasOwn(SC_FN, fn)) throw new Error('unknown SoundCloud call');
+    return SC_FN[fn](...(Array.isArray(args) ? args : []));
   });
 
   // ---------------------------------------------------------------- updates

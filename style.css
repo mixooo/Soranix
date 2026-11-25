@@ -617,8 +617,11 @@ body.mini-mode .win:not(#w-main):not(.dlg){display:none!important}
 .svc-pick{display:flex;gap:10px;justify-content:center;margin:12px 0 8px}
 .svc-btn{min-width:150px;height:42px;font:bold 14px var(--font);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
 .svc-btn i{width:9px;height:9px;border:1px solid #000}
-.svc-sp i{background:#3f3;box-shadow:0 0 4px #3f3}
-.svc-yt i{background:#f33;box-shadow:0 0 4px #f33}
+.svc-btn.svc-sp i{background:#3f3;box-shadow:0 0 4px #3f3}
+.svc-btn.svc-yt i{background:#f33;box-shadow:0 0 4px #f33}
+/* (only the Choose your music buttons: in SoundCloud mode the whole page is .svc-sc) */
+.svc-btn.svc-sc i{background:#ff9f27;box-shadow:0 0 4px #ff9f27}
+.dlg.svc-dlg{width:480px}   /* Choose your music: room for three services */
 .svc-btn:focus{outline:1px dotted #fff;outline-offset:-4px}
 .svc-remember{display:flex;gap:6px;align-items:center;justify-content:center;color:#c8cad8;font-size:12px}
 /* ---------------- the logo's switch: Spotify / YouTube Music ---------------- */
@@ -626,11 +629,13 @@ body.mini-mode .win:not(#w-main):not(.dlg){display:none!important}
 .svcfly-in{zoom:var(--z);padding:4px 5px 5px;background:linear-gradient(180deg,#4a4b63,#2c2d40);border:1px solid #000;
   box-shadow:inset 1px 1px 0 #7a7d96,0 6px 18px #000a}
 .svcfly-title{font:bold 7px/11px var(--mono);letter-spacing:1px;color:#d6c89a;text-align:center;margin-bottom:3px}
-.svc-toggle{position:relative;display:flex;background:#000;border:1px solid #000;box-shadow:inset 1px 1px 0 #000,1px 1px 0 #7a7d96;width:176px;height:16px}
+.svc-toggle{position:relative;display:flex;background:#000;border:1px solid #000;box-shadow:inset 1px 1px 0 #000,1px 1px 0 #7a7d96;width:246px;height:16px}
 .svc-toggle span{position:relative;z-index:1;flex:1;text-align:center;font:bold 8px/16px var(--mono);color:#6a6c80;cursor:pointer;letter-spacing:.5px}
-.svc-toggle .knob{position:absolute;top:1px;bottom:1px;left:1px;width:calc(50% - 2px);transition:left .25s ease,background .25s;
+.svc-toggle .knob{position:absolute;top:1px;bottom:1px;left:1px;width:calc(33.333% - 2px);transition:left .25s ease,background .25s;
   background:linear-gradient(#5f6278,#34364a);box-shadow:inset 1px 1px 0 #9a9db6}
-.svc-toggle.on-ytm .knob{left:calc(50% + 1px)}
+.svc-toggle.on-ytm .knob{left:calc(33.333% + 1px)}
+.svc-toggle.on-sc .knob{left:calc(66.667% + 1px)}
+.svc-toggle.on-sc span[data-s=sc]{color:#ff9f27;text-shadow:0 0 4px #f928}
 .svc-toggle.on-spotify span[data-s=spotify]{color:#3f3;text-shadow:0 0 4px #0f08}
 .svc-toggle.on-ytm span[data-s=ytm]{color:#ff4040;text-shadow:0 0 4px #f008}
 .svc-toggle span:hover{color:#fff}
@@ -665,7 +670,9 @@ html.no-rowart .grid th.num,html.no-rowart .grid td.num{width:36px}   /* Setting
 .grid tr.svc-yt td,.plrow.svc-yt .t,.plrow.svc-yt .d{color:#ff3b3b}
 .grid tr.cur.svc-sp td,.plrow.cur.svc-sp .t,.plrow.cur.svc-sp .d{color:#b6ffb6}
 .grid tr.cur.svc-yt td,.plrow.cur.svc-yt .t,.plrow.cur.svc-yt .d{color:#ffbcbc}
-.grid tr.sel.svc-sp td,.grid tr.sel.svc-yt td{color:#fff}
+.grid tr.svc-sc td,.plrow.svc-sc .t,.plrow.svc-sc .d{color:#ff9f27}
+.grid tr.cur.svc-sc td,.plrow.cur.svc-sc .t,.plrow.cur.svc-sc .d{color:#ffd9a8}
+.grid tr.sel.svc-sp td,.grid tr.sel.svc-yt td,.grid tr.sel.svc-sc td{color:#fff}
 /* ---------------- My playlists window (your own lists, Spotify + YouTube Music) ---------------- */
 .mxwin{width:640px;height:400px}
 .mx-body{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;padding:6px}
@@ -677,11 +684,11 @@ html.no-rowart .grid th.num,html.no-rowart .grid td.num{width:36px}   /* Setting
 .mx-list{display:flex;align-items:center;gap:6px;padding:3px 6px;cursor:default;color:#d6d8e6;font:12px/16px var(--font)}
 .mx-list .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mx-list .c b{font-weight:normal;font-size:10px}
-.mx-list .c .svc-sp{color:#2fd52f}.mx-list .c .svc-yt{color:#ff3b3b}
+.mx-list .c .svc-sp{color:#2fd52f}.mx-list .c .svc-yt{color:#ff3b3b}.mx-list .c .svc-sc{color:#ff9f27}
 .mx-list.sel{background:#0000c6;color:#fff}
 .mx-song{display:flex;gap:8px;padding:1px 6px;font:12px/18px var(--font);cursor:default}
 .mx-song .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mx-song.svc-sp{color:#2fd52f}.mx-song.svc-yt{color:#ff3b3b}
+.mx-song.svc-sp{color:#2fd52f}.mx-song.svc-yt{color:#ff3b3b}.mx-song.svc-sc{color:#ff9f27}
 .mx-song.sel{background:#0000c6;color:#fff}
 .mx-empty{color:#8a8ea8;padding:10px;font:12px/1.5 var(--font)}
 .mx-foot{display:flex;align-items:center;gap:4px;flex-wrap:wrap}

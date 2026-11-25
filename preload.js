@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('desktop', {
   // YouTube Music (test): controls the hidden YouTube Music window
   ytm: (fn, args) => ipcRenderer.invoke('ytm', fn, args || []),
   onYtm: cb => ipcRenderer.on('ytm-event', (_e, m) => cb(m)),
+  sc: (fn, args) => ipcRenderer.invoke('sc', fn, args || []),
+  scapi: (fn, args) => ipcRenderer.invoke('scapi', fn, args || []),
   // YouTube Music mode: lyrics from Limusic's lyrics service, by video id
   limusicLyrics: id => ipcRenderer.invoke('limusic-lyrics', id),
   // Settings > Global hotkeys (Ctrl+Alt+Space / arrows anywhere); answers the ones it couldn't take
