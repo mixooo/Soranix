@@ -1,13 +1,21 @@
 # Soranix
 
-**A classic-style desktop music player for Spotify Premium on Windows, now also on Mac and Linux (test builds).**
-Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, and a design built around one goal: use as few Spotify requests as possible, so you don't hit Spotify's cooldowns.
+**A classic-style desktop music player for Spotify Premium and YouTube Music on Windows, now also on Mac and Linux (test builds).**
+Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, synced lyrics, playlists that mix Spotify and YouTube Music songs, and a design built around one goal: use as few Spotify requests as possible, so you don't hit Spotify's cooldowns.
 
-![Soranix: the player, Up Next, playlist editor, library and queue windows docked together](docs/screenshots/overview.png)
+**Spotify mode** (green):
 
-<p align="center"><img src="docs/screenshots/milkdrop.png" alt="The MilkDrop visualizer window" width="400"></p>
+![Soranix in Spotify mode: the player, Up Next, queue, library, playlist editor, Now Playing with lyrics and the MilkDrop visualizer](docs/screenshots/spotify.webp)
 
-> Unofficial, fan-made project. Not made, endorsed or supported by Spotify. "Spotify" is a trademark of Spotify AB.
+**YouTube Music mode** (red):
+
+![Soranix in YouTube Music mode: the same windows in red, with a YouTube Music search open in the library](docs/screenshots/youtube-music.webp)
+
+**Mixed playlist:** Spotify songs in green, YouTube Music songs in red, one after the other.
+
+<p align="center"><img src="docs/screenshots/mixed-playlist.png" alt="The playlist window with two Spotify songs in green and two YouTube Music songs in red" width="600"></p>
+
+> Unofficial, fan-made project. Not made, endorsed or supported by Spotify or YouTube. "Spotify" is a trademark of Spotify AB; "YouTube Music" is a trademark of Google LLC.
 
 ## Download
 
@@ -78,6 +86,8 @@ Soranix talks to Spotify through **your own** free Spotify developer app:
 
 Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
 
+**YouTube Music needs no setup:** pick **YouTube Music** when Soranix starts (or click the logo on the player to switch). Sign in with your Google account from the library to get your Liked music and playlists; searching and Discover work without signing in.
+
 ## Features
 
 **Player and windows**
@@ -94,6 +104,19 @@ Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
 - **Similar music after a search**: play a song from Search and a mix of related artists follows it instead of the other search results. Artists are spaced apart, karaoke and instrumental versions are left out, a few of your liked songs are mixed in, recently played songs aren't repeated, and skipping an artist early plays less of them.
 - **Artist window**: bio and links (MusicBrainz, Wikipedia), discography, follow and unfollow.
 - **Song info**, synced **lyrics** (LRCLIB) and a **MilkDrop** visualizer (Butterchurn) that reacts to your PC's sound.
+- **Discover new music**: a grid of covers with a mix made for you. **New mix** and **More** each take 20 songs.
+
+**YouTube Music (in test)**
+- Pick Spotify or YouTube Music at start, or switch any time with the logo. The whole skin turns red in YouTube Music mode.
+- Same windows and controls: playlist, Up Next, queue, Now Playing, lyrics, mini mode, media keys and hotkeys.
+- No ads. Discover (YouTube Music's picks for you), search with All / Songs / Videos / Albums / Artists / Playlists filters, Liked music and your playlists.
+- Always the audio version of a song; **Video** in Now Playing shows the music video instead of the cover.
+- Only the service you use runs, so YouTube Music mode never sends Spotify a request.
+
+**Mixed playlists**
+- The playlist window shows each song in its service's colour: Spotify green, YouTube Music red. Drag songs in from the library or Discover.
+- **MY LISTS** (next to LIST OPTS): your own lists, saved on your PC, with Spotify and YouTube Music songs side by side.
+- When the next song is from the other service, Soranix switches over by itself, usually in under a second. Your open windows stay open.
 
 **Windows integration**
 - Song, artist and cover in Windows' media flyout and lock screen. Its buttons and your keyboard's media keys control Soranix.
@@ -143,6 +166,7 @@ Saved copies take very little space (well under 1 MB for a typical library). Any
 - Your login and settings stay on your PC (`%APPDATA%\Soranix`). There's no Soranix server.
 - The visualizers analyse your PC's sound output locally. Nothing is recorded or sent anywhere.
 - Outside Spotify, Soranix only contacts public music databases: LRCLIB (lyrics), MusicBrainz and Wikipedia (artist info) and Deezer (related artists). It sends them song or artist names only.
+- In YouTube Music mode, Soranix plays through YouTube Music's own website in a hidden window, signed in with your Google account (if you sign in). Lyrics there also come from a public lyrics service, looked up by the song's YouTube ID.
 
 ## Building from source
 
@@ -172,6 +196,8 @@ npx electron-builder@26.18.0 --mac     # or --linux; files land in dist/
 | `main.js` | Electron main process: windows, the built-in local server on `127.0.0.1:8888`, taskbar buttons |
 | `preload.js` | The bridge between the page and Windows |
 | `app.js` | The player: Spotify login (PKCE), playback, library, request queue, saved copies |
+| `ytm.js` | YouTube Music mode: service picker, red theme, library, search, Discover, playback |
+| `ytm-bridge.js`, `ytm-preload.js` | Run inside the hidden YouTube Music window: player control, YouTube Music's own API, ad removal |
 | `index.html`, `style.css` | Windows and theme |
 | `helpers/balance.cs` | The small Windows helper for left/right balance |
 | `installer/` | WiX installer definition and build script |
