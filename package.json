@@ -1,6 +1,6 @@
 {
   "name": "soranix",
-  "version": "1.0.332",
+  "version": "1.0.333",
   "private": true,
   "description": "Classic-style desktop player for your Spotify account",
   "main": "main.js",
