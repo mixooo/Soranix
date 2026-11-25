@@ -9,7 +9,7 @@ const ROOT = __dirname;
 const OUT = path.join(ROOT, 'release', 'Soranix');
 const DIST = path.join(ROOT, 'node_modules', 'electron', 'dist');
 const RCEDIT = path.join(ROOT, 'node_modules', 'rcedit', 'bin', 'rcedit-x64.exe');
-const APP_FILES = ['main.js', 'preload.js', 'index.html', 'app.js', 'style.css', 'manifest.json'];
+const APP_FILES = ['main.js', 'preload.js', 'index.html', 'app.js', 'ytm.js', 'ytm-bridge.js', 'ytm-preload.js', 'style.css', 'manifest.json'];
 const pkg = require('./package.json');
 
 const step = s => console.log('\n== ' + s);

@@ -48,7 +48,7 @@ const TYPES = {
   '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp',
 };
 // only the app's own files are served (never node_modules or anything else in the folder)
-const PUBLIC = new Set(['index.html', 'app.js', 'style.css', 'manifest.json']);
+const PUBLIC = new Set(['index.html', 'app.js', 'ytm.js', 'style.css', 'manifest.json']);
 const isPublic = rel => PUBLIC.has(rel) || /^icons\/[\w.-]+\.(png|ico|webp)$/.test(rel) || /^vendor\/[\w.-]+\.js$/.test(rel);
 // where updates come from (GitHub releases of this repository, nothing else)
 const REPO = 'mixooo/Soranix';
@@ -109,6 +109,10 @@ if (process.env.SORANIX_DEBUG) app.commandLine.appendSwitch('remote-debugging-po
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+// Chromium keeps an empty page process ready, and old pages alive for the Back button (about
+// 100 MB each), so web pages open faster;
+// Soranix almost never opens a new page, so that memory is saved
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache');
 // macOS 13+: let MilkDrop / the visualizer hear what the Mac is playing (asks for Screen Recording permission)
 if (IS_MAC) app.commandLine.appendSwitch('enable-features', 'MacLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride');
 
@@ -119,6 +123,10 @@ if (IS_LINUX && !app.commandLine.hasSwitch('ozone-platform') && process.env.XDG_
   app.exit(0);
 }
 
+// The taskbar preview and Alt-Tab show a picture of the player. Normally it is refreshed now and
+// then; while a preview can be on screen (mouse over the taskbar, Alt or the Windows key held)
+// it is refreshed about 15 times a second, so the preview looks live.
+const PREVIEW = { until: 0, keys: false };
 let win = null;   // the see-through layer that draws every Soranix window
 let host = null;  // small player-sized window: the one the taskbar and Alt-Tab show
 if (IS_WIN) app.setAppUserModelId('Soranix');
@@ -364,6 +372,9 @@ app.whenReady().then(async () => {
     const p = screen.getCursorScreenPoint(), b = win.getBounds(), x = p.x - b.x, y = p.y - b.y;
     const over = shapeRects.some(r => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
     if (over !== polledOver) { polledOver = over; applyHover(); }
+    // over the taskbar (the part of a screen outside its work area): a preview may show
+    const d = screen.getDisplayNearestPoint(p), wa = d.workArea;
+    if (p.x < wa.x || p.y < wa.y || p.x >= wa.x + wa.width || p.y >= wa.y + wa.height || PREVIEW.keys) PREVIEW.until = Date.now() + 1500;
   }, 40);
   // Balance: a tiny helper sets the left/right volume of Soranix's own sound in Windows
   // (the same per-app volume the Windows mixer uses). It quits when Soranix does.
@@ -371,7 +382,13 @@ app.whenReady().then(async () => {
   try {
     const exe = path.join(ROOT, 'helpers', 'balance.exe');
     if (IS_WIN && fs.existsSync(exe)) {
-      balancer = spawn(exe, [path.parse(process.execPath).name], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true });
+      balancer = spawn(exe, [path.parse(process.execPath).name], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+      // the helper says when Alt or the Windows key is held (Alt-Tab / Win+Tab show previews)
+      let buf = '';
+      balancer.stdout.on('data', d => {
+        buf += d; const lines = buf.split(/\r?\n/); buf = lines.pop();
+        for (const l of lines) if (l.startsWith('preview ')) { PREVIEW.keys = l.endsWith('1'); if (PREVIEW.keys) PREVIEW.until = Date.now() + 1500; }
+      });
       balancer.on('error', () => { balancer = null; });
       balancer.on('exit', () => { balancer = null; });
     }
@@ -409,6 +426,88 @@ app.whenReady().then(async () => {
   app.on('before-quit', () => { try { balancer?.kill(); } catch {} });
 
   ipcMain.on('app-cmd', (_e, cmd) => { if (cmd === 'minimize') host.minimize(); else if (cmd === 'quit') app.quit(); });
+
+  // ---------------------------------------------------------------- YouTube Music (test)
+  // When YouTube Music is picked, a hidden window runs music.youtube.com and plays the music;
+  // the player page controls it through ytm-bridge.js. It has its own session, so the Google
+  // login stays separate from everything else. It is only created when YouTube Music is used.
+  let ytm = null, ytmLoggingIn = false, quitting = false;
+  app.on('before-quit', () => { quitting = true; });
+  const YTM_URL = 'https://music.youtube.com/';
+  const YTM_BRIDGE = fs.readFileSync(path.join(ROOT, 'ytm-bridge.js'), 'utf8');
+  const YTM_CALLS = new Set(['hello', 'state', 'play', 'pause', 'seek', 'vol', 'next', 'prev', 'load', 'search', 'liked', 'playlists', 'playlist', 'frame', 'videoFor', 'songFor', 'account', 'find', 'album', 'artist', 'home', 'shelfMore', 'history', 'cue']);
+  function ytmWindow() {
+    if (ytm && !ytm.isDestroyed()) return ytm;
+    const ses = session.fromPartition('persist:ytm');
+    // Google's sign-in refuses browsers built into apps ("This browser or app may not be
+    // secure"). This window introduces itself as Firefox, and without the Chrome-only
+    // "client hints" that would give it away; YouTube Music works the same in Firefox.
+    ses.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0');
+    // Nobody looks at this window, so it doesn't load pictures (thumbnails, avatars; Soranix shows
+    // covers itself) or ad and tracking requests: less memory, processor and network for music.
+    // (While its sign-in page is shown, everything loads as normal.)
+    const NOT_NEEDED = /doubleclick\.net|googlesyndication\.com|googleadservices\.com|google-analytics\.com|googletagmanager\.com|\/pagead\/|\/ptracking|\/api\/stats\/(ads|qoe|atr)|\/youtubei\/v1\/log_event|play\.google\.com\/log/;
+    // YouTube Music's service worker (a background script for offline use and notifications)
+    // would keep a page process of its own running (about 120 MB): not installed, and removed
+    ses.clearStorageData({ storages: ['serviceworkers'] }).catch(() => {});
+    ses.webRequest.onBeforeRequest((d, cb) => {
+      if (/^https:\/\/music\.youtube\.com\/sw\.js/.test(d.url)) return cb({ cancel: true });
+      if (ytm && !ytm.isDestroyed() && ytm.isVisible()) return cb({});
+      cb({ cancel: d.resourceType === 'image' || NOT_NEEDED.test(d.url) });
+    });
+    ses.webRequest.onBeforeSendHeaders((d, cb) => {
+      const h = d.requestHeaders;
+      for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
+      cb({ requestHeaders: h });
+    });
+    ytm = new BrowserWindow({
+      width: 1100, height: 760, show: false, title: 'Soranix - YouTube Music', icon: ICON, autoHideMenuBar: true,
+      webPreferences: { session: ses, preload: path.join(ROOT, 'ytm-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
+    });
+    ytm.on('close', e => { if (!quitting) { e.preventDefault(); ytm.hide(); } }); // closing just hides it
+    ytm.webContents.setWindowOpenHandler(({ url }) => { openLink(url); return { action: 'deny' }; });
+    // signed in: Google sends the window back to YouTube Music; hide it again and tell the player
+    ytm.webContents.on('did-navigate', (_e, url) => {
+      if (ytmLoggingIn && url.startsWith(YTM_URL)) { ytmLoggingIn = false; ytm.hide(); if (win && !win.isDestroyed()) win.webContents.send('ytm-event', 'login-done'); }
+    });
+    ytm.loadURL(YTM_URL);
+    return ytm;
+  }
+  // Lyrics from Limusic's lyrics service (lyrics.limusic.app), filed by YouTube video id, timed
+  // to the exact upload. Used in YouTube Music mode only; asked from here because the service
+  // doesn't answer web pages directly.
+  ipcMain.handle('limusic-lyrics', async (_e, id) => {
+    if (!/^[\w-]{11}$/.test(String(id))) return null;
+    try {
+      const r = await fetch(`https://lyrics.limusic.app/v1/lyrics/${id}`, {
+        headers: { 'User-Agent': 'Soranix (https://github.com/mixooo/Soranix)' }, signal: AbortSignal.timeout(4000),
+      });
+      if (r.status === 404) return { none: true };
+      if (!r.ok) return null;
+      const j = await r.json();
+      return { origin: String(j.origin || ''), lines: (j.lines || []).map(l => ({ t: Math.max(0, +l.time_ms || 0), end: +l.end_time_ms || 0, text: String(l.text || '') })) };
+    } catch { return null; }
+  });
+  ipcMain.handle('ytm', async (_e, fn, args) => {
+    if (fn === 'stop') { if (ytm && !ytm.isDestroyed()) ytm.destroy(); ytm = null; return true; }
+    const w = ytmWindow();
+    if (fn === 'login') {
+      ytmLoggingIn = true;
+      w.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&passive=true&continue=' +
+        encodeURIComponent('https://www.youtube.com/signin?action_handle_signin=true&app=desktop&next=' + encodeURIComponent(YTM_URL)));
+      w.show(); w.focus();
+      return true;
+    }
+    if (fn === 'show') { w.show(); w.focus(); return true; }
+    // log out: everything the YouTube Music window keeps (its Google sign-in included) is cleared
+    if (fn === 'logout') { await w.webContents.session.clearStorageData(); w.loadURL(YTM_URL); return true; }
+    if (!YTM_CALLS.has(fn)) throw new Error('unknown YouTube Music call');
+    if (w.webContents.isLoading() || !w.webContents.getURL().startsWith(YTM_URL)) {
+      await new Promise(res => { const t = setTimeout(res, 20000); w.webContents.once('did-finish-load', () => { clearTimeout(t); res(); }); });
+    }
+    await w.webContents.executeJavaScript(YTM_BRIDGE);
+    return w.webContents.executeJavaScript(`window.__sx.${fn}(...${JSON.stringify(Array.isArray(args) ? args : [])})`);
+  });
 
   // ---------------------------------------------------------------- updates
   // Twice a day Soranix asks GitHub whether a newer release exists. If so, the page asks you
@@ -487,8 +586,10 @@ app.whenReady().then(async () => {
   // while dragging: make the picture window fully see-through, so it never shows a stale or
   // empty picture behind the moving player (it comes back with a fresh picture afterwards)
   const blank = () => { try { host.setOpacity(0); } catch {} host.webContents.executeJavaScript("document.getElementById('i').classList.remove('on')").catch(() => {}); };
+  let snapping = false;
   const snap = async () => {
-    if (!player || dragging || !win.isVisible() || host.isMinimized()) return;
+    if (snapping || !player || dragging || !win.isVisible() || host.isMinimized()) return;
+    snapping = true;
     try {
       const img = await win.webContents.capturePage({ x: Math.round(player.x), y: Math.round(player.y), width: Math.round(player.w), height: Math.round(player.h) });
       if (img.isEmpty()) return;
@@ -497,7 +598,7 @@ app.whenReady().then(async () => {
       lastShot = url;
       await host.webContents.executeJavaScript(`document.getElementById('i').src=${JSON.stringify(url)}`);
       try { host.setOpacity(1); } catch {}
-    } catch {}
+    } catch {} finally { snapping = false; }
   };
   ipcMain.on('player-rect', (_e, r) => {
     if (!r || !host || host.isDestroyed()) return;
@@ -510,7 +611,8 @@ app.whenReady().then(async () => {
     clearTimeout(shotTimer);
     if (!dragging) shotTimer = setTimeout(snap, 250);
   });
-  setInterval(snap, 8000); // keeps the Alt-Tab preview fresh without costly constant captures
+  setInterval(snap, 8000); // keeps the picture fresh without costly constant captures
+  setInterval(() => { if (Date.now() < PREVIEW.until) snap(); }, 66); // live while a preview can show
 
   const fit = () => {
     if (!win || win.isDestroyed()) return;

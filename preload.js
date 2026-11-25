@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('desktop', {
   setDuck: v => ipcRenderer.send('duck', v),
   // keep Soranix above other apps
   setOnTop: on => ipcRenderer.send('on-top', !!on),
+  // YouTube Music (test): controls the hidden YouTube Music window
+  ytm: (fn, args) => ipcRenderer.invoke('ytm', fn, args || []),
+  onYtm: cb => ipcRenderer.on('ytm-event', (_e, m) => cb(m)),
+  // YouTube Music mode: lyrics from Limusic's lyrics service, by video id
+  limusicLyrics: id => ipcRenderer.invoke('limusic-lyrics', id),
   // Settings > Global hotkeys (Ctrl+Alt+Space / arrows anywhere); answers the ones it couldn't take
   globalKeys: on => ipcRenderer.invoke('global-keys', !!on),
   // the buttons under the taskbar preview (prev / play / pause / stop / next)
@@ -43,7 +48,7 @@ if (!OURS) {
   const mark = () => document.documentElement && document.documentElement.classList.add('desktop');
   mark();
   window.addEventListener('DOMContentLoaded', mark);
-  const UI = '.win:not(.hidden), .menu, .dlg-back';
+  const UI = '.win:not(.hidden), .menu, .dlg-back, .svcfly';
   const check = e => {
     if (e.buttons) return setOver(true); // keep the mouse while dragging a window or slider
     const el = document.elementFromPoint(e.clientX, e.clientY);

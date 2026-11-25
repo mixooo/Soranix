@@ -571,7 +571,7 @@ html.desktop .win{filter:drop-shadow(0 3px 6px #0007)}
 .mini-body{display:none;position:relative;height:20px}
 .win.minibar .main-body{display:none}
 .win.minibar .mini-body{display:block}
-body.mini-mode .win:not(#w-main){display:none!important}
+body.mini-mode .win:not(#w-main):not(.dlg){display:none!important}
 .mini-body > *{position:absolute}
 .mini-time{left:5px;top:3px;width:30px;height:11px;background:#000;color:#00e000;font:7px/11px var(--font);text-align:center;cursor:pointer;line-height:0;padding-top:3px;box-sizing:border-box}
 .mini-marq{left:38px;top:3px;width:104px;height:11px;background:#000;overflow:hidden;white-space:nowrap;cursor:default}
@@ -610,3 +610,81 @@ body.mini-mode .win:not(#w-main){display:none!important}
   color:transparent;-webkit-background-clip:text;background-clip:text;background-image:linear-gradient(90deg,#ffe08a,#ff9a6b 55%,#ff5f9e);
   filter:drop-shadow(0 0 6px #ff7a7a88);text-shadow:none}
 .lyrth-sunset .lyr-msg{color:#d8c6f0;font:italic 14px/1.6 Georgia,serif}
+/* the mini bars are thin: a bigger invisible area around them catches the mouse */
+.mini-vol::after,.mini-seek::after{content:"";position:absolute;left:-2px;right:-2px;top:-5px;bottom:-4px}
+.mini-vol:hover,.mini-seek:hover{filter:brightness(1.25)}
+/* ---------------- choosing the music service at start ---------------- */
+.svc-pick{display:flex;gap:10px;justify-content:center;margin:12px 0 8px}
+.svc-btn{min-width:150px;height:42px;font:bold 14px var(--font);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.svc-btn i{width:9px;height:9px;border:1px solid #000}
+.svc-sp i{background:#3f3;box-shadow:0 0 4px #3f3}
+.svc-yt i{background:#f33;box-shadow:0 0 4px #f33}
+.svc-btn:focus{outline:1px dotted #fff;outline-offset:-4px}
+.svc-remember{display:flex;gap:6px;align-items:center;justify-content:center;color:#c8cad8;font-size:12px}
+/* ---------------- the logo's switch: Spotify / YouTube Music ---------------- */
+.svcfly{position:fixed;z-index:99998}
+.svcfly-in{zoom:var(--z);padding:4px 5px 5px;background:linear-gradient(180deg,#4a4b63,#2c2d40);border:1px solid #000;
+  box-shadow:inset 1px 1px 0 #7a7d96,0 6px 18px #000a}
+.svcfly-title{font:bold 7px/11px var(--mono);letter-spacing:1px;color:#d6c89a;text-align:center;margin-bottom:3px}
+.svc-toggle{position:relative;display:flex;background:#000;border:1px solid #000;box-shadow:inset 1px 1px 0 #000,1px 1px 0 #7a7d96;width:176px;height:16px}
+.svc-toggle span{position:relative;z-index:1;flex:1;text-align:center;font:bold 8px/16px var(--mono);color:#6a6c80;cursor:pointer;letter-spacing:.5px}
+.svc-toggle .knob{position:absolute;top:1px;bottom:1px;left:1px;width:calc(50% - 2px);transition:left .25s ease,background .25s;
+  background:linear-gradient(#5f6278,#34364a);box-shadow:inset 1px 1px 0 #9a9db6}
+.svc-toggle.on-ytm .knob{left:calc(50% + 1px)}
+.svc-toggle.on-spotify span[data-s=spotify]{color:#3f3;text-shadow:0 0 4px #0f08}
+.svc-toggle.on-ytm span[data-s=ytm]{color:#ff4040;text-shadow:0 0 4px #f008}
+.svc-toggle span:hover{color:#fff}
+/* Now Playing > Video (YouTube Music only) */
+#np-video{display:none}
+body.svc-ytm #np-video{display:flex}
+#np-vid{display:none;width:100%;height:100%;object-fit:contain;background:#000}
+.show-video #np-img{display:none!important}
+.show-video #np-vid{display:block}
+/* desktop app: windows hidden until placed and coloured (see reveal() in app.js) */
+html.desktop:not(.ready) #desktop{visibility:hidden}
+/* a small cover next to each song's number in the library */
+.grid th.num,.grid td.num{width:64px}
+html.no-rowart .grid th.num,html.no-rowart .grid td.num{width:36px}   /* Settings: covers off */
+.grid td.num .rowart{width:18px;height:18px;object-fit:cover;border-radius:3px;vertical-align:middle;margin:1px 6px 1px 0;float:left;background:#222}
+/* the player's logo on the Choose your music buttons (red copy set by ytm.js) */
+.svc-btn i.svc-logo{width:22px;height:22px;border:none;box-shadow:none;background:url(icons/badge.png) 0 0/22px 22px no-repeat;image-rendering:pixelated;filter:drop-shadow(1px 1px 0 #0006)}
+.svc-pick .svc-btn{flex:1;white-space:nowrap;padding:0 12px;min-width:0}
+.svc-btn i.svc-logo{flex:none}   /* never squeezed by a long label */
+/* YouTube Music > Discover: a grid of covers */
+.ytcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:14px 12px;padding:12px}
+.ytcard{cursor:pointer;min-width:0}
+.ytcard .art{aspect-ratio:1;background:#111;border:1px solid #000;overflow:hidden}
+.ytcard.wide .art{aspect-ratio:16/9}
+.ytcard .art img{width:100%;height:100%;object-fit:cover;display:block}
+.ytcard:hover .art{outline:1px solid var(--g);outline-offset:1px}
+.ytcard .t{margin-top:5px;color:var(--g);font:12px/1.3 var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ytcard .s{color:#8a8ea8;font:11px/1.3 var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cards-msg{color:#9aa0c4;padding:10px}
+/* mixed playlists: every song in its service's colour, in both modes */
+.grid tr.svc-sp td,.plrow.svc-sp .t,.plrow.svc-sp .d{color:#2fd52f}
+.grid tr.svc-yt td,.plrow.svc-yt .t,.plrow.svc-yt .d{color:#ff3b3b}
+.grid tr.cur.svc-sp td,.plrow.cur.svc-sp .t,.plrow.cur.svc-sp .d{color:#b6ffb6}
+.grid tr.cur.svc-yt td,.plrow.cur.svc-yt .t,.plrow.cur.svc-yt .d{color:#ffbcbc}
+.grid tr.sel.svc-sp td,.grid tr.sel.svc-yt td{color:#fff}
+/* ---------------- My playlists window (your own lists, Spotify + YouTube Music) ---------------- */
+.mxwin{width:640px;height:400px}
+.mx-body{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;padding:6px}
+.mx-main{flex:1;display:flex;gap:6px;min-height:0}
+.mx-lists{width:190px;flex:none;overflow:auto;background:#000;border:1px solid #000}
+.mx-right{flex:1;display:flex;flex-direction:column;min-width:0;gap:4px}
+.mx-head{color:#e6e8f2;font:bold 12px/18px var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mx-songs{flex:1;overflow:auto;background:#000;border:1px solid #000}
+.mx-list{display:flex;align-items:center;gap:6px;padding:3px 6px;cursor:default;color:#d6d8e6;font:12px/16px var(--font)}
+.mx-list .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mx-list .c b{font-weight:normal;font-size:10px}
+.mx-list .c .svc-sp{color:#2fd52f}.mx-list .c .svc-yt{color:#ff3b3b}
+.mx-list.sel{background:#0000c6;color:#fff}
+.mx-song{display:flex;gap:8px;padding:1px 6px;font:12px/18px var(--font);cursor:default}
+.mx-song .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mx-song.svc-sp{color:#2fd52f}.mx-song.svc-yt{color:#ff3b3b}
+.mx-song.sel{background:#0000c6;color:#fff}
+.mx-empty{color:#8a8ea8;padding:10px;font:12px/1.5 var(--font)}
+.mx-foot{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.mx-note{margin-left:auto;color:#7a7e9c;font-size:10px}
+.drop-on{outline:2px dashed #e0c040;outline-offset:-3px}
+#grid tbody tr[draggable=true],.ytcard[draggable=true]{-webkit-user-drag:element}

@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <title>Soranix</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- the desktop app draws its windows on a see-through layer: say so before the first paint, or the
+     whole screen area flashes the browser background for a moment while the page (re)loads -->
+<script>if (window.desktop) document.documentElement.classList.add('desktop');</script>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="64x64" href="icons/icon-64.png">
@@ -123,8 +126,35 @@
             </div>
           </div>
           <span class="plcur" id="plcur">:</span>
+          <span class="pb two" id="pl-my" title="My playlists: your own lists, Spotify and YouTube Music songs together"><span data-px>MY</span><span data-px>LISTS</span></span>
           <span class="pb two" id="pl-list" title="List options"><span data-px>LIST</span><span data-px>OPTS</span></span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MY PLAYLISTS (your own lists, Spotify + YouTube Music) ============ -->
+  <div class="win lib mxwin hidden" id="w-mx" data-win="mx">
+    <div class="title">
+      <span class="ridge"></span><span class="tname">SORANIX MY PLAYLISTS</span><span class="ridge"></span>
+      <span class="tbtn" data-act="close" title="Close">&times;</span>
+    </div>
+    <div class="body mx-body">
+      <div class="mx-main">
+        <div class="mx-lists" id="mx-lists"></div>
+        <div class="mx-right">
+          <div class="mx-head" id="mx-head"></div>
+          <div class="mx-songs" id="mx-songs"></div>
+        </div>
+      </div>
+      <div class="mx-foot">
+        <button class="btn sm" id="mx-new" title="A new, empty list">New</button>
+        <button class="btn sm" id="mx-save" title="Save the songs in the playlist window as a new list">Save playlist window</button>
+        <button class="btn sm" id="mx-play" title="Put this list in the playlist window and play it">Play</button>
+        <button class="btn sm" id="mx-add" title="Add this list to the end of the playlist window">Add to playlist window</button>
+        <button class="btn sm" id="mx-ren">Rename</button>
+        <button class="btn sm" id="mx-del">Delete</button>
+        <span class="mx-note">Spotify songs green, YouTube Music red. Drag songs here from the library.</span>
       </div>
     </div>
   </div>
@@ -167,6 +197,7 @@
             <button class="btn" id="lib-play">Play</button>
             <button class="btn" id="lib-enq">Enqueue</button>
             <button class="btn" id="lib-more">More</button>
+            <button class="btn" id="lib-newmix" title="A fresh mix (2 Spotify requests)" style="display:none">New mix</button>
             <span class="libstatus" id="libstatus"></span>
           </div>
         </div>
@@ -184,9 +215,10 @@
       <div class="np-tabs">
         <span class="npbtn" id="np-cover" title="Show / hide the cover art"><i></i>Cover art</span>
         <span class="npbtn" id="np-lyr" title="Show / hide the lyrics"><i></i>Lyrics</span>
+        <span class="npbtn" id="np-video" title="Show the music video instead of the cover (YouTube Music)"><i></i>Video</span>
         <span class="lcdtag" id="lyr-mode"></span>
       </div>
-      <div class="np-art" id="np-art"><img id="np-img" alt=""></div>
+      <div class="np-art" id="np-art"><img id="np-img" alt=""><img id="np-vid" alt=""></div>
       <div class="np-info"><div class="np-title" id="np-title">Nothing playing</div><div class="np-artist" id="np-artist"></div></div>
       <div class="lyr-text" id="lyr-text"><div class="lyr-msg">Play a song and its lyrics show up here.</div></div>
       <div class="lyr-foot">
@@ -228,6 +260,7 @@
     <div class="body art-body" id="art-body"></div>
   </div>
 </div>
+<script src="ytm.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

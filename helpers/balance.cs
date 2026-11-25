@@ -64,6 +64,51 @@ static class Balance {
   static readonly System.Collections.Generic.Dictionary<uint, string> names = new System.Collections.Generic.Dictionary<uint, string>();
   static float gain = 1;                   // current ducking factor (1 = normal)
   static readonly Stopwatch voiceAt = new Stopwatch();
+  // Only to keep the taskbar / Alt-Tab preview live: is Alt or the Windows key held down right
+  // now (Alt-Tab and Win+Tab show window previews), or is the mouse over the taskbar or a
+  // preview? No other key is ever read.
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+  [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  // the taskbar (main and other screens), its window previews, and the Alt-Tab / Task View switchers
+  static readonly string[] PREVIEW_CLASSES = { "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "TaskListThumbnailWnd", "XamlExplorerHostIslandWindow", "MultitaskingViewFrame", "TaskSwitcherWnd", "ForegroundStaging" };
+  [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public int dwFlags; }
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+  [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+  // Is the mouse where a taskbar is (or appears, when it hides itself)? Its window keeps its
+  // size while hidden, so the band it shows in is known even then.
+  static bool OverTaskbar(POINT p) {
+    foreach (var cls in new[] { "Shell_TrayWnd", "Shell_SecondaryTrayWnd" }) {
+      IntPtr h = IntPtr.Zero;
+      while ((h = FindWindowEx(IntPtr.Zero, h, cls, null)) != IntPtr.Zero) {
+        RECT r; if (!GetWindowRect(h, out r)) continue;
+        var mi = new MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+        if (!GetMonitorInfo(MonitorFromWindow(h, 2 /*nearest*/), ref mi)) continue;
+        var m = mi.rcMonitor; int w = r.Right - r.Left, hh = r.Bottom - r.Top;
+        RECT band;
+        if (w >= hh) { band.Left = m.Left; band.Right = m.Right; if (r.Top + hh / 2 > (m.Top + m.Bottom) / 2) { band.Top = m.Bottom - hh; band.Bottom = m.Bottom; } else { band.Top = m.Top; band.Bottom = m.Top + hh; } }
+        else { band.Top = m.Top; band.Bottom = m.Bottom; if (r.Left + w / 2 > (m.Left + m.Right) / 2) { band.Left = m.Right - w; band.Right = m.Right; } else { band.Left = m.Left; band.Right = m.Left + w; } }
+        if (p.X >= band.Left && p.X < band.Right && p.Y >= band.Top && p.Y < band.Bottom) return true;
+      }
+    }
+    return false;
+  }
+  static bool PreviewKeysDown() {
+    if ((GetAsyncKeyState(0x12 /*Alt*/) & 0x8000) != 0 || (GetAsyncKeyState(0x5B /*left Win*/) & 0x8000) != 0 || (GetAsyncKeyState(0x5C /*right Win*/) & 0x8000) != 0) return true;
+    // the mouse is over the taskbar or a preview
+    POINT p; if (!GetCursorPos(out p)) return false;
+    if (OverTaskbar(p)) return true;
+    IntPtr h = WindowFromPoint(p); if (h == IntPtr.Zero) return false;
+    IntPtr root = GetAncestor(h, 2 /*GA_ROOT*/); if (root != IntPtr.Zero) h = root;
+    var sb = new System.Text.StringBuilder(64); GetClassName(h, sb, 64);
+    return Array.IndexOf(PREVIEW_CLASSES, sb.ToString()) >= 0;
+  }
 
   static string NameOf(uint pid) {
     string n;
@@ -123,6 +168,7 @@ static class Balance {
       Environment.Exit(0); // Soranix closed
     });
     reader.IsBackground = true; reader.Start();
+    bool lastKeys = false;
     int last = int.MinValue; float lastGain = 1; Stopwatch timer = Stopwatch.StartNew(), scan = Stopwatch.StartNew();
     while (true) {
       // while ducking is on, look for voice a few times a second; keep the music down for a
@@ -142,6 +188,8 @@ static class Balance {
         try { Apply(true); } catch { }
         last = pan; lastGain = gain; timer.Restart();
       }
+      bool keys = PreviewKeysDown();
+      if (keys != lastKeys) { lastKeys = keys; try { Console.WriteLine(keys ? "preview 1" : "preview 0"); Console.Out.Flush(); } catch { } }
       Thread.Sleep(50);
     }
   }
