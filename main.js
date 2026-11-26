@@ -131,7 +131,8 @@ let win = null;   // the see-through layer that draws every Soranix window
 let host = null;  // small player-sized window: the one the taskbar and Alt-Tab show
 if (IS_WIN) app.setAppUserModelId('Soranix');
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => { if (host) { if (host.isMinimized()) host.restore(); host.show(); } if (win) win.focus(); });
+// (started again while this copy is closing: its windows may be gone already, so they're checked first)
+app.on('second-instance', () => { if (host && !host.isDestroyed()) { if (host.isMinimized()) host.restore(); host.show(); } if (win && !win.isDestroyed()) win.focus(); });
 app.on('window-all-closed', () => app.quit());
 // macOS: clicking the Dock icon brings the player back
 app.on('activate', () => { if (host && host.isMinimized()) host.restore(); if (win && !win.isDestroyed()) { win.show(); win.focus(); } });
@@ -718,6 +719,57 @@ app.whenReady().then(async () => {
     return SC_FN[fn](...(Array.isArray(args) ? args : []));
   });
 
+  // ---------------------------------------------------------------- Discord activity
+  // "Listening to YouTube Music / SoundCloud / Spotify" on your Discord profile: Soranix talks to
+  // the Discord app on this PC the way games do (its local connection, nothing over the internet
+  // from here). The title is the name of the Discord application whose id the page sends (one per
+  // service, made by you in Discord's Developer Portal); the song, artist, cover and progress bar
+  // come from the player. Only the song shown is sent, to Discord.
+  const net = require('net');
+  const DC = { sock: null, appId: '', ready: false };
+  const dcFrame = (op, obj) => { const j = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(8); h.writeInt32LE(op, 0); h.writeInt32LE(j.length, 4); return Buffer.concat([h, j]); };
+  const dcPipe = i => (IS_WIN ? `\\\\?\\pipe\\discord-ipc-${i}` : path.join(process.env.XDG_RUNTIME_DIR || process.env.TMPDIR || '/tmp', `discord-ipc-${i}`));
+  function dcClose() { try { DC.sock?.destroy(); } catch {} DC.sock = null; DC.ready = false; DC.appId = ''; }
+  async function dcConnect(appId) {
+    if (DC.sock && DC.ready && DC.appId === appId) return true;
+    dcClose();
+    let sock = null;
+    for (let i = 0; i < 10 && !sock; i++) {
+      sock = await new Promise(res => { const s = net.createConnection(dcPipe(i), () => res(s)); s.once('error', () => res(null)); });
+    }
+    if (!sock) return false;   // Discord isn't running
+    DC.sock = sock; DC.appId = appId;
+    return new Promise(res => {
+      let buf = Buffer.alloc(0), done = false;
+      const end = v => { if (!done) { done = true; res(v); } };
+      sock.on('data', d => {
+        buf = Buffer.concat([buf, d]);
+        while (buf.length >= 8) {
+          const op = buf.readInt32LE(0), len = buf.readInt32LE(4);
+          if (buf.length < 8 + len) break;
+          let msg = null; try { msg = JSON.parse(buf.subarray(8, 8 + len).toString()); } catch {}
+          buf = buf.subarray(8 + len);
+          if (op === 1 && msg?.evt === 'READY') { DC.ready = true; end(true); }
+          else if (op === 2) { if (DC.sock === sock) dcClose(); end(false); }          // closed (an unknown app id, say)
+          else if (op === 3) sock.write(dcFrame(4, msg));                              // ping -> pong
+        }
+      });
+      sock.on('error', () => { if (DC.sock === sock) dcClose(); end(false); });
+      sock.on('close', () => { if (DC.sock === sock) dcClose(); end(false); });
+      sock.write(dcFrame(0, { v: 1, client_id: appId }));
+      setTimeout(() => end(DC.ready), 5000);
+    });
+  }
+  ipcMain.handle('discord', async (_e, appId, activity) => {
+    // off: the activity is taken away (closing the connection clears it too)
+    if (!appId) { if (DC.sock && DC.ready) { try { DC.sock.write(dcFrame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity: null }, nonce: String(Date.now()) })); } catch {} } setTimeout(dcClose, 300); return 'off'; }
+    if (!/^\d{15,22}$/.test(String(appId))) return 'bad-id';
+    if (!(await dcConnect(String(appId)))) return DC.sock ? 'refused' : 'no-discord';
+    try { DC.sock.write(dcFrame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity: activity || null }, nonce: String(Date.now()) })); }
+    catch { dcClose(); return 'no-discord'; }
+    return 'ok';
+  });
+
   // ---------------------------------------------------------------- updates
   // Twice a day Soranix asks GitHub whether a newer release exists. If so, the page asks you
   // first; only when you press Install is the new MSI downloaded, checked against the SHA-256
@@ -727,6 +779,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('app-version', () => app.getVersion());
   ipcMain.on('update-check', () => checkForUpdate(true));
   ipcMain.on('update-install', () => installUpdate());
+  // a restarted player page (a switch to YouTube Music / SoundCloud) asks how far the download is
+  ipcMain.handle('update-progress', () => UPD.dl || null);
   async function checkForUpdate(manual = false) {
     if (UPD.busy) return;
     // the self-updater installs MSI packages, so it only runs on Windows
@@ -767,10 +821,11 @@ app.whenReady().then(async () => {
         hash.update(chunk); got += chunk.length;
         if (!out.write(chunk)) await new Promise(res => out.once('drain', res));
         const pct = total ? Math.floor(got * 100 / total) : 0;
-        if (pct !== lastPct && pct % 5 === 0) { lastPct = pct; say({ state: 'downloading', pct }); }
+        if (pct !== lastPct) { lastPct = pct; UPD.dl = { version: u.version, pct }; say({ state: 'downloading', pct, version: u.version }); }
       }
       await new Promise((res, rej) => out.end(err => (err ? rej(err) : res())));
       if (hash.digest('hex') !== expect) { fs.rmSync(file, { force: true }); throw new Error('the download did not match its fingerprint, so it was not installed'); }
+      UPD.dl = null;
       say({ state: 'installing', version: u.version });
       // after Soranix has closed: install quietly (progress bar only), then start the new version
       const exe = installedExe();
@@ -778,7 +833,7 @@ app.whenReady().then(async () => {
       spawn('cmd.exe', ['/d', '/s', '/c', `"${cmd}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
       setTimeout(() => app.quit(), 800);
     } catch (e) {
-      UPD.busy = false;
+      UPD.busy = false; UPD.dl = null;
       console.log('[update] install failed:', e.message);
       say({ state: 'error', message: e.message });
     }

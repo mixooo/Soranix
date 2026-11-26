@@ -8,6 +8,9 @@
 const { webFrame } = require('electron');
 webFrame.executeJavaScript(`(() => {
   try { Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true }); } catch (e) {}
+  // YouTube pauses after a long time without clicks or keys on its page ("Video paused. Continue
+  // watching?"), and nobody clicks this hidden page: it's told someone was just here, every 30 s
+  setInterval(() => { try { window._lact = Date.now(); } catch (e) {} }, 30000);
   const AD_KEYS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams', 'adBreakParams'];
   window.__sxAdsRemoved = 0;
   const prune = o => {

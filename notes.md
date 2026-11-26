@@ -1,34 +1,21 @@
 ## What's new
 
-**SoundCloud (new, in test)**
-- Soranix can now play **SoundCloud** too. Pick it at start in "Choose your music" or with the logo switch on the player. In SoundCloud mode everything turns **SoundCloud orange**.
-- **Search** with Everything / Tracks / People / Albums / Playlists, and **Discover new music** with SoundCloud's own Discover sections as a grid of covers. Albums, playlists and people open to their songs.
-- Same player and windows: playlist, Up Next, queue, Now Playing, lyrics, mini mode, media keys and hotkeys.
-- **Sign in with authorized token** (in the library): SoundCloud refuses its own sign-in inside apps, so you bring your login over from Firefox or Chrome. The steps are shown in the window. Then your **Likes** and **playlists** appear in the library.
-- **Right-click a song:** Like on SoundCloud, or add it to one of your SoundCloud playlists.
-- Songs only available on **SoundCloud Go+** are marked "(Go+)" and skipped.
-- If SoundCloud asks you to prove you're human, **Verify SoundCloud** appears at the top of the library.
+**Discord activity**
+- New **Discord button** next to shuffle (the old SHUFFLE button is now two: shuffle and Discord). Turn it on and your Discord profile shows **"Listening to YouTube Music"** or **"Listening to SoundCloud"** with the song, artist, cover and a progress bar. Nothing shows while paused.
+- Set it up once in **Settings > Discord activity...**: it explains how to make a Discord application for each service and where to paste its ID. (For Spotify, Discord already shows your listening by itself when Spotify is connected in Discord.)
+- Shuffle, Discord and repeat are now buttons of the same size.
 
 **YouTube Music**
-- **Search "All"** now shows every song's length, artist and album (it showed 0:00 and dates before).
-- **Right-click a song:** Save to Liked music, or add it to one of your YouTube Music playlists.
-- The logo is now YouTube Music's exact red.
+- **Fewer random stops:** YouTube pauses after a while without anyone clicking its page ("Continue watching?"). Soranix now keeps it from asking, answers the question if it comes anyway, and carries on playing if YouTube Music pauses by itself.
+- **Artist pages show all their songs**, not just the top 5.
+- **Right-click an album, artist or playlist** (also on SoundCloud): Play, Add to queue, Add to Soranix playlist, Artist info (Wikipedia) and Copy link, without opening it first.
 
-**Artists (YouTube Music and SoundCloud)**
-- Clicking an artist opens the **artist window**: a **Wikipedia** bio, details (group or solo, where they're from, years active) and links. It opens from search, Discover, the artist's name in Now Playing, or right-click > Go to artist.
-
-**Spotify**
-- **Search** has a **Podcasts** tab, next to Songs, Artists, Albums and Playlists.
-- New **Discover podcasts** in the library, under Discover new music: podcasts as a grid of covers by topic (Popular, Comedy, True crime, News, Sports, Business and more). More loads 10 more.
-
-**Playlist window**
-- The playlist window is now **your own list**. Playing something from the library no longer copies it into the playlist window; it plays as it is, and Up Next shows what's next. The playlist window only plays when you start a song from it.
+**Updates**
+- The update progress ("DOWNLOADING UPDATE: 15%") now shows in YouTube Music and SoundCloud mode too, also right after switching services.
 
 **Fixes**
-- "Choose your music" and the Queue window now open on the monitor your player is on (they always opened on the main monitor).
-- Pressing Play with nothing playing no longer switches to another service.
-- "Choose your music" has room for all three services.
+- Fixed an error box ("Object has been destroyed") when Soranix was started again while it was still closing.
 
 ## Install
 
-On Soranix 1.0.332, the app offers this update by itself; press **Install** (or Settings > Check for updates). Otherwise, download **`Soranix-1.0.333.msi`** below and run it; it keeps your login and playlists.
+On Soranix 1.0.333, the app offers this update by itself; press **Install** (or Settings > Check for updates). Otherwise, download **`Soranix-1.0.334.msi`** below and run it; it keeps your login and playlists.

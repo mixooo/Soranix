@@ -92,8 +92,11 @@ canvas{image-rendering:pixelated}
 .tb svg{width:10px;height:9px;display:block;margin:auto;fill:var(--ico)}
 #b-prev{left:16px} #b-play{left:39px} #b-pause{left:62px} #b-stop{left:85px} #b-next{left:108px;width:22px}
 #b-eject{left:136px;top:75px;width:22px;height:16px}
-#tog-shuf{left:164px;top:76px;width:44px;height:14px;font-size:6px}
-#tog-rep{left:210px;top:76px;width:27px;height:14px}
+/* shuffle and Discord: the old SHUFFLE button, split in two */
+#tog-shuf{left:164px;top:76px;width:21px;height:14px;font-size:6px}
+#tog-dc{left:187px;top:76px;width:21px;height:14px}
+#tog-shuf .ico,#tog-dc .ico{flex:none;display:block;margin:0 auto}
+#tog-rep{left:210px;top:76px;width:21px;height:14px}
 #tog-rep b{font:bold 9px/10px var(--font)}
 .badge{left:249px;top:76px;width:15px;height:15px;cursor:pointer;border-radius:3px;border:1px solid #000;
   background:linear-gradient(135deg,#6a6c84,#2c2e3e)}

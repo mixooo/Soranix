@@ -354,6 +354,8 @@ function setupMain() {
     const b = $('#b-' + k); b.innerHTML = ICON[k]; b.onclick = () => T[k]();
   }
   $('#tog-shuf').onclick = () => T.shuffle();
+  $('#tog-dc').onclick = () => toggleDiscord();
+  $('#tog-dc').classList.toggle('on', DCA.on);
   $('#tog-rep').onclick = () => T.repeat();
   $('#tog-eq').onclick = () => showWin('eq', !isShown('eq'));
   $('#tog-pl').onclick = () => showWin('pl', !isShown('pl'));
@@ -1913,6 +1915,7 @@ async function songMenu(e, tracks, src) {
   }
 }
 function containerMenu(e, r) {
+  if (YT.on) return openMenu(e, webContainerMenu(r));   // (YouTube Music / SoundCloud: ytm.js)
   const items = [
     { label: 'Open', key: 'Enter', fn: () => activateRow(L.view.rows.indexOf(r)) },
     r.type !== 'artist' && { label: 'Play', fn: () => { L.sel = new Set([L.view.rows.indexOf(r)]); libSend(true); } },
@@ -1982,6 +1985,7 @@ function mainMenu(e) {
 function settingsItems() {
   return [
     { label: 'Music service: ' + (YT.on ? W().name : 'Spotify'), sub: serviceMenu },
+    { label: 'Discord activity...', fn: discordSettings },
     '-',
     { label: 'Always on top', check: LS.get('onTop', false), disabled: !window.desktop?.setOnTop, fn: () => setOnTop(!LS.get('onTop', false)) },
     { label: `Global hotkeys (${keyName(GK.got.toggle) || 'Ctrl+Alt+Space'}, Ctrl+Alt+arrows), also in games`, check: LS.get('globalKeys', false), disabled: !window.desktop?.globalKeys, fn: () => setGlobalKeys(!LS.get('globalKeys', false)) },
@@ -3416,6 +3420,82 @@ function setupQueueWin() {
   if (LS.get('shown', {}).qu) { winEl('qu').classList.add('hidden'); Promise.race([S.displaysReady, sleep(1500)]).then(() => toggleQueueWin(true)); }
 }
 
+/* ------------------------------------------------------------------ Discord activity
+   The Discord button (next to shuffle) shows "Listening to Spotify / YouTube Music / SoundCloud"
+   on your Discord profile, like Discord's own Spotify activity: the song, artist, cover, a
+   progress bar and the service's logo. The title is the name of a Discord application, one per
+   service, that you make in Discord's Developer Portal (Settings > Discord activity takes their
+   ids). Nothing is sent while paused or stopped, and only to the Discord app on this PC. */
+const DCA = { on: LS.get('discord', false), last: '', sentAt: 0, warned: '', cleared: false };
+const DC_LOGO = 'https://raw.githubusercontent.com/mixooo/Soranix/main/icons/';
+const DC_LOGOS = { spotify: DC_LOGO + 'discord-spotify.png', ytm: DC_LOGO + 'discord-ytm.png', sc: DC_LOGO + 'discord-sc.png' };
+const dcSvc = () => (YT.on ? YT.svc : 'spotify');
+const dcAppId = () => String(LS.get('discordApps', {})[dcSvc()] || '').trim();
+function dcActivity() {
+  const t = S.track;
+  if (!t || S.paused || S.stopped) return null;
+  const pos = curPos(), dur = S.dur || 0, now = Date.now();
+  const txt = x => { x = String(x || '').slice(0, 128); return x.length < 2 ? (x + '  ').slice(0, 2) : x; };   // (Discord wants 2-128 characters)
+  const cover = (t.album?.images || []).reduce((m, i) => (!m || (i.width || 0) > (m.width || 0) ? i : m), null)?.url || '';
+  const a = { type: 2, details: txt(t.name), state: txt((t.artists || []).map(x => x.name).join(', ')), assets: {} };
+  if (dur) a.timestamps = { start: Math.round(now - pos), end: Math.round(now - pos + dur) };
+  if (/^https:\/\//.test(cover) && cover.length <= 256) { a.assets.large_image = cover; if (t.album?.name) a.assets.large_text = txt(t.album.name); }
+  // (no small service logo for YouTube Music / SoundCloud: the title already says which)
+  if (DC_LOGOS[dcSvc()] && !YT.on) { a.assets.small_image = DC_LOGOS[dcSvc()]; a.assets.small_text = SVC_NAME[dcSvc()]; }
+  return a;
+}
+const DC_SAY = {
+  'no-discord': 'DISCORD ISN\'T RUNNING - OPEN IT TO SHOW YOUR ACTIVITY',
+  'refused': 'DISCORD DIDN\'T ACCEPT THE APP ID - CHECK SETTINGS > DISCORD ACTIVITY',
+  'bad-id': 'THAT DISCORD APP ID DOESN\'T LOOK RIGHT - CHECK SETTINGS > DISCORD ACTIVITY',
+};
+async function dcUpdate(force = false) {
+  if (!DCA.on || !window.desktop?.discord) return;
+  const id = dcAppId();
+  // no app id for this service: an activity left from the other service is taken away
+  if (!id) { if (!DCA.cleared) { DCA.cleared = true; DCA.last = ''; window.desktop.discord('', null).catch(() => {}); } return; }
+  DCA.cleared = false;
+  const act = dcActivity();
+  // sent only when what it shows changes: the song, play / pause, a jump in position (Discord takes
+  // at most 5 changes in 20 seconds)
+  const key = act ? `${act.details}|${act.state}|${Math.round((act.timestamps?.start || 0) / 4000)}` : 'none';
+  if (!force && (key === DCA.last || Date.now() - DCA.sentAt < 4000)) return;
+  DCA.last = key; DCA.sentAt = Date.now();
+  const r = await window.desktop.discord(id, act).catch(() => 'no-discord');
+  if (r === 'ok') DCA.warned = '';
+  else { DCA.last = ''; if (DCA.warned !== r) { DCA.warned = r; showMsg(DC_SAY[r] || 'DISCORD: ' + r, 4000); } }
+}
+setInterval(() => dcUpdate(false), 2000);
+function toggleDiscord() {
+  if (!window.desktop?.discord) return showMsg('DISCORD ACTIVITY NEEDS THE DESKTOP APP', 2500);
+  if (!DCA.on && !dcAppId()) { showMsg(`ADD THE DISCORD APP ID FOR ${SVC_NAME[dcSvc()].toUpperCase()} FIRST`, 3000); return discordSettings(); }
+  DCA.on = !DCA.on; LS.set('discord', DCA.on);
+  $('#tog-dc').classList.toggle('on', DCA.on);
+  DCA.last = ''; DCA.warned = ''; DCA.cleared = false;
+  if (DCA.on) { showMsg('DISCORD ACTIVITY: ON', 1800); dcUpdate(true); }
+  else { showMsg('DISCORD ACTIVITY: OFF', 1800); window.desktop.discord('', null).catch(() => {}); }
+}
+async function discordSettings() {
+  const ids = LS.get('discordApps', {});
+  const r = await winDialog({ title: 'DISCORD ACTIVITY', wide: true, ok: 'Save',
+    message: 'Your Discord profile can show "Listening to ..." with the song, cover and a progress bar. The title is the name of a Discord application, so make one per service:\n\n' +
+      '1. Open discord.com/developers/applications and press New Application.\n' +
+      '2. Name it exactly as the title should read: YouTube Music, SoundCloud or Spotify.\n' +
+      '3. Copy its Application ID (General Information) into the matching box below.\n\n' +
+      'Leave a box empty to show nothing in that mode. (Spotify: Discord already shows your Spotify listening by itself when Spotify is connected in Discord > Settings > Connections.) Then press the Discord button next to shuffle.',
+    fields: [
+      { label: 'YouTube Music app ID', value: ids.ytm || '', placeholder: 'e.g. 1234567890123456789' },
+      { label: 'SoundCloud app ID', value: ids.sc || '', placeholder: 'e.g. 1234567890123456789' },
+      { label: 'Spotify app ID (optional)', value: ids.spotify || '', placeholder: 'leave empty to use Discord\'s own Spotify activity' },
+    ] });
+  if (!r) return;
+  const clean = v => String(v || '').replace(/\D/g, '');
+  LS.set('discordApps', { ytm: clean(r[0]), sc: clean(r[1]), spotify: clean(r[2]) });
+  showMsg('DISCORD APP IDS SAVED', 1800);
+  DCA.last = ''; DCA.warned = ''; DCA.cleared = false;
+  if (DCA.on) dcUpdate(true);
+}
+
 /* ------------------------------------------------------------------ mini mode
    The player as one slim bar (song, time, buttons, volume, position), for a corner of a second
    screen. The other windows are only hidden, not closed, and come back where they were; windows
@@ -4119,6 +4199,9 @@ function updateBanner(now) {
   return `DOWNLOADING UPDATE${UPDL.version ? ' ' + UPDL.version : ''}: ${UPDL.pct}%`;
 }
 window.desktop?.appVersion?.().then(v => { APP_VERSION = v || ''; setTimeout(whatsNewAfterUpdate, 2500); });
+// an update downloading while the player restarted (a switch to YouTube Music / SoundCloud and back):
+// its progress shows again right away, in every mode
+window.desktop?.updateProgress?.().then(d => { if (d) Object.assign(UPDL, { on: true, version: d.version || '', pct: d.pct || 0, t0: performance.now() }); }).catch(() => {});
 
 /* What's new: on the first start after an update, the new version's release notes show once.
    They were saved when you pressed Install, so no request is needed; otherwise (installed by
@@ -4172,7 +4255,7 @@ window.desktop?.onUpdate?.(async m => {
       { title: 'UPDATE AVAILABLE', ok: 'Install', cancel: 'Later', wide: true });
     if (yes) { LS.set('notes:' + m.version, notesText(m.notes)); Object.assign(UPDL,{ on: true, version: m.version, pct: 0, t0: performance.now() }); window.desktop.installUpdate(); }
     else LS.set('updLater', { version: m.version, at: Date.now() });
-  } else if (m.state === 'downloading') { UPDL.pct = m.pct; if (!UPDL.on) Object.assign(UPDL, { on: true, version: '', t0: performance.now() }); }
+  } else if (m.state === 'downloading') { UPDL.pct = m.pct; if (m.version) UPDL.version = m.version; if (!UPDL.on) Object.assign(UPDL, { on: true, t0: performance.now() }); }
   else if (m.state === 'installing') { UPDL.on = false; showMsg(`INSTALLING SORANIX ${m.version} - BACK IN A FEW SECONDS`, 8000); }
   else if (m.state === 'none') showMsg(`SORANIX ${m.version} IS THE LATEST VERSION`, 2500);
   else if (m.state === 'error') (UPDL.on = false), winAlert('The update could not be installed:\n' + m.message + '\n\nYou can also download it from github.com/mixooo/Soranix/releases', { title: 'UPDATE' });

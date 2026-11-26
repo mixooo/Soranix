@@ -81,6 +81,13 @@ if (!window.__sx) window.__sx = (() => {
     hello() { return { signedIn: !!window.ytcfg?.get?.('LOGGED_IN'), hasPlayer: !!P()?.getPlayerState }; },
     state() {
       const p = P(); if (!p?.getPlayerState) return null;
+      // the "Video paused. Continue watching?" prompt came anyway: answered (Yes) and playing on
+      const still = document.querySelector('ytmusic-you-there-renderer, yt-confirm-dialog-renderer');
+      if (still && still.offsetParent !== null && /still|continue|paused/i.test(still.innerText || '')) {
+        (still.querySelector('#confirm-button button, #main button, yt-button-renderer button, tp-yt-paper-button, button'))?.click();
+        window.__sxStillThere = (window.__sxStillThere || 0) + 1;
+        p.playVideo?.();
+      }
       const d = p.getVideoData?.() || {}, v = V(), m = navigator.mediaSession?.metadata;
       return {
         id: d.video_id || '', ps: p.getPlayerState(), ad: p.classList.contains('ad-showing'),
@@ -92,6 +99,8 @@ if (!window.__sx) window.__sx = (() => {
         art: m && m.title === d.title ? (m.artwork || []).map(a => ({ url: a.src, size: parseInt(a.sizes) || 0 })) : [],
         signedIn: !!window.ytcfg?.get?.('LOGGED_IN'),
         adsRemoved: window.__sxAdsRemoved || 0,   // ad lists taken out of YouTube's answers (ytm-preload.js)
+        stillThere: window.__sxStillThere || 0,   // "Continue watching?" prompts answered
+        url: location.pathname,
         // ATV = audio-only track (a still picture), OMV / UGC = a real video
         mvType: p.getPlayerResponse?.()?.videoDetails?.musicVideoType || '',
       };
@@ -220,7 +229,24 @@ if (!window.__sx) window.__sx = (() => {
     },
     // an album's songs (they share its cover) and an artist's songs (their page's song list)
     async album(id) { return songs(await call('browse', { browseId: String(id) })); },
-    async artist(id) { return songs(await call('browse', { browseId: String(id) })); },
+    // an artist's songs: their page only lists the top 5, so its "Top songs" link is followed to the
+    // full list (100 a page; up to 300), like the website's See all
+    async artist(id) {
+      const j = await call('browse', { browseId: String(id) });
+      const sh = walk(j, 'musicShelfRenderer')[0];
+      const all = sh?.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || sh?.bottomEndpoint?.browseEndpoint?.browseId;
+      if (!all) return songs(j);
+      let page = await call('browse', { browseId: all });
+      const out = songs(page);
+      for (let n = 0; n < 2; n++) {
+        const tok = walk(page, 'continuationCommand')[0]?.token || walk(page, 'nextContinuationData')[0]?.continuation;
+        if (!tok) break;
+        page = await call('browse', { continuation: tok });
+        out.push(...songs(page));
+      }
+      const seen = new Set();
+      return (out.length ? out : songs(j)).filter(s => !seen.has(s.videoId) && seen.add(s.videoId));
+    },
     // the signed-in account: its name and @handle, as the website's account menu shows them
     async account() {
       const h = walk(await call('account/account_menu', {}), 'activeAccountHeaderRenderer')[0];

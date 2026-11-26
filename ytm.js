@@ -341,8 +341,8 @@ async function ytForgetLists() {
 /* ---------- the player: Spotify's player object, played by YouTube Music ---------- */
 const ytPlayer = {
   connect() {}, addListener() {}, activateElement() {},
-  async togglePlay() { const st = await ytCall('state'); return ytCall(st && st.ps === 1 ? 'pause' : 'play'); },
-  pause: () => ytCall('pause'), resume: () => ytCall('play'),
+  async togglePlay() { const st = await ytCall('state'); if (st && st.ps === 1) YT.userPause = Date.now(); return ytCall(st && st.ps === 1 ? 'pause' : 'play'); },
+  pause: () => { YT.userPause = Date.now(); return ytCall('pause'); }, resume: () => ytCall('play'),
   seek: ms => ytCall('seek', Math.max(0, ms)),
   setVolume: f => ytCall('vol', Math.round(f * 100)),
   getVolume: () => Promise.resolve(S.vol / 100),
@@ -499,10 +499,31 @@ async function ytFrames() {
 document.addEventListener('visibilitychange', () => { if (YT.video) ytFrames(); });
 /* when a song ends, the next row of the playlist window plays (YouTube Music would otherwise
    pick something itself) */
+/* YouTube Music pausing by itself (reported: "randomly stops playing"): a pause you didn't make,
+   in the middle of a song, is written down (LS ytmStops, the last 20: when, where in the song,
+   what the page showed) and playback goes on (at most 3 times in 10 minutes, so a real problem
+   isn't hidden by an endless loop). */
+function ytStoppedByItself(st, cur, sid) {
+  const prev = YT.lastPs; YT.lastPs = st.ps;
+  if (YT.svc !== 'ytm' || prev !== 1 || st.ps !== 2 || st.ad || S.stopped) return;
+  if (Date.now() - (YT.userPause || 0) < 4000 || Date.now() - YT.advancing < 3000) return;   // you paused, or a song is starting
+  if (!cur || cur.id !== sid || !st.dur || st.dur - st.pos < 2500) return;                    // not ours, or just the end
+  const log = LS.get('ytmStops', []);
+  log.push({ at: new Date().toISOString(), song: cur.name, pos: st.pos, dur: st.dur, still: st.stillThere || 0, ads: st.adsRemoved || 0, url: st.url || '', signedIn: !!st.signedIn });
+  LS.set('ytmStops', log.slice(-20));
+  console.warn('[ytm] paused by itself', log.at(-1));
+  YT.resumes = (YT.resumes || []).filter(t => Date.now() - t < 600000);
+  if (YT.resumes.length >= 3) return showMsg('YOUTUBE MUSIC KEEPS PAUSING BY ITSELF - PRESS PLAY', 4000);
+  YT.resumes.push(Date.now());
+  showMsg('YOUTUBE MUSIC PAUSED BY ITSELF - PLAYING ON', 2500);
+  ytCall('play').catch(() => {});
+}
 function ytWatch() {
   const st = YT.st;
-  if (!st || st.ad || Date.now() - YT.advancing < 3000) return;
+  if (!st) return;
   const cur = S.now[S.plCur], sid = YT.altOf[st.id] || st.id;
+  ytStoppedByItself(st, cur, sid);
+  if (st.ad || Date.now() - YT.advancing < 3000) return;
   // mixed playlist, next song on another service: start switching just before the end (the other
   // player needs a moment to start), so the gap stays short
   const nx = S.now[S.plCur + 1];
@@ -881,4 +902,36 @@ async function webAddToPlaylist(tracks, p) {
     await DB.del(YT.svc + ':pl:' + p.id);
     showMsg(`ADDED ${songs(tracks.length).toUpperCase()} TO ${p.name.toUpperCase()}`, 2500);
   } catch (e) { showMsg(W().up + ': ' + e.message.toUpperCase(), 4500); }
+}
+
+/* ---------- right-click on an album, artist or playlist (YouTube Music / SoundCloud) ----------
+   Its songs (the same saved copies opening it uses) can be played, queued or added to the playlist
+   window without opening it first; an artist also has their Wikipedia info; and a link to it. */
+async function webItemSongs(r) {
+  const list = await (r.type === 'album' ? ytCached('album:' + r.id, YT_KEEP.lookup, () => ytCall('album', r.id))
+    : r.type === 'artist' ? ytCached('artist:' + r.id, YT_KEEP.list, () => ytCall('artist', r.id))
+      : ytCached('pl:' + r.id, YT_KEEP.list, () => ytCall('playlist', r.id)));
+  return list.map(s => (r.type === 'album' ? { ...s, img: s.img || r.img, imgLarge: s.imgLarge || r.imgLarge, album: s.album || r.name, artists: s.artists?.length ? s.artists : [r.artist].filter(Boolean) } : s))
+    .map(ytRow).filter(Boolean);
+}
+function webItemLink(r) {
+  if (YT.svc === 'sc') return String(r.id).startsWith('urn:') ? '' : 'https://soundcloud.com' + r.id;
+  return r.type === 'playlist' ? 'https://music.youtube.com/playlist?list=' + r.id : 'https://music.youtube.com/browse/' + r.id;
+}
+function webContainerMenu(r) {
+  const withSongs = fn => async () => {
+    libStatus(`Loading ${r.name}...`);
+    try { const t = await webItemSongs(r); if (!t.length) return libStatus('No songs found in ' + r.name + '.'); libStatus(''); fn(t); }
+    catch (e) { libStatus('Could not load ' + r.name + ': ' + e.message); }
+  };
+  const link = webItemLink(r);
+  return [
+    { label: 'Open', key: 'Enter', fn: () => ytOpenItem(r) },
+    { label: 'Play', fn: withSongs(t => playList(t, 0)) },
+    { label: 'Add to queue', key: 'Q', fn: withSongs(t => addToQueue(t)) },
+    { label: 'Add to Soranix playlist', key: 'E', fn: withSongs(t => { const n = plAdd(t, false); showMsg(`ADDED ${songs(n).toUpperCase()} TO PLAYLIST`); }) },
+    r.type === 'artist' && { label: 'Artist info (Wikipedia)', fn: () => openWebArtist({ name: r.name, img: r.imgLarge || r.img, id: r.id }) },
+    link && '-',
+    link && { label: `Copy ${W().name} link`, fn: () => copyText(link, 'LINK') },
+  ].filter(Boolean);
 }

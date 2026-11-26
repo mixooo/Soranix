@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('desktop', {
   onYtm: cb => ipcRenderer.on('ytm-event', (_e, m) => cb(m)),
   sc: (fn, args) => ipcRenderer.invoke('sc', fn, args || []),
   scapi: (fn, args) => ipcRenderer.invoke('scapi', fn, args || []),
+  // Discord: the "Listening to ..." activity (app id of the service, and what to show; none = off)
+  discord: (appId, activity) => ipcRenderer.invoke('discord', appId || '', activity || null),
   // YouTube Music mode: lyrics from Limusic's lyrics service, by video id
   limusicLyrics: id => ipcRenderer.invoke('limusic-lyrics', id),
   // Settings > Global hotkeys (Ctrl+Alt+Space / arrows anywhere); answers the ones it couldn't take
@@ -41,6 +43,7 @@ contextBridge.exposeInMainWorld('desktop', {
   onUpdate: cb => ipcRenderer.on('update', (_e, m) => cb(m)),
   checkUpdate: () => ipcRenderer.send('update-check'),
   installUpdate: () => ipcRenderer.send('update-install'),
+  updateProgress: () => ipcRenderer.invoke('update-progress'),
 });
 
 if (!OURS) {

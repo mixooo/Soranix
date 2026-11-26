@@ -8,11 +8,19 @@ powershell -ExecutionPolicy Bypass -File publish.ps1 -NotesFile notes.md
 
 ## To do
 
-- **YouTube Music artist pages** show only the artist's top 5 songs; load the full song list.
-- **YouTube Music right-click menus on albums / artists / playlists** in search still offer Spotify-style actions that don't work there.
-
-- **Faster update downloads (look into):** updating 1.0.330 to 1.0.331 took about 25 minutes on this PC (about 100 KB/s), while a normal download here is several times faster. Find out whether the app's downloader or GitHub is the slow part.
 - Later (once nobody is on 1.0.327-1.0.329): remove the old-name launcher from the installer (`installer\oldname.cs`, the OldNameLauncher component in `installer\Soranix.wxs`, its lines in `build-msi.ps1`).
+
+## Done (shipped in 1.0.334)
+
+- **YouTube Music stopping by itself (most likely cause fixed, and recorded if it happens again).** YouTube pauses after a long time without clicks or keys on its page ("Video paused. Continue watching?"), and nobody clicks the hidden YouTube Music window: it's now told someone was just there every 30 s (ytm-preload.js), and the prompt is answered by itself if it comes anyway. Any pause in the middle of a song that you didn't make is written down (LS ytmStops, the last 20: song, position, whether the prompt was answered, ads removed, signed in) and playback goes on, at most 3 times in 10 minutes (then "YOUTUBE MUSIC KEEPS PAUSING BY ITSELF - PRESS PLAY"). If it still happens, ytmStops tells why.
+- **Update progress shows after a service switch too.** The download (main.js) keeps its progress; a player page restarted by a switch to YouTube Music / SoundCloud asks for it and shows "DOWNLOADING UPDATE 1.0.x: 15%" right away (5 s progress / 5 s song, every mode). The progress is sent every 1% with the version.
+- **Update download speed (looked into):** measured on this PC: the updater's download runs at about 2 MB/s (Chromium's own download was slower, 1.5 MB/s, so it was not changed). The 25 minutes for 1.0.330 -> 1.0.331 was most likely GitHub / the network at that moment.
+- **YouTube Music artist pages show all their songs:** the artist page's "Top songs" link is followed to the full list, 100 a page, up to 300 (Daft Punk: 5 -> 148, tested live).
+- **Right-click on albums, artists and playlists (YouTube Music / SoundCloud):** Open, Play, Add to queue, Add to Soranix playlist (their songs, from the same saved copies), Artist info (Wikipedia) for artists, Copy YouTube Music / SoundCloud link. Menu checked on screen.
+- **Repeat button** is the same size as the shuffle and Discord buttons.
+- **Crash when Soranix is started again while closing** ("Object has been destroyed", main.js line 134): its windows are checked before they're brought to the front.
+
+- **Discord activity ("Listening to YouTube Music / SoundCloud / Spotify").** The SHUFFLE button is split in two: a shuffle button with the crossed-arrows icon, and a new Discord button (Discord's logo, its light on while the activity is on). Soranix talks to the Discord app on the PC through Discord's local connection (main.js, no library) and shows a Listening activity: song, artist, cover (with the album as its hover text), a progress bar from the song's position and length, and a small grey logo of the service (icons/discord-ytm.png, discord-sc.png, discord-spotify.png, loaded by Discord from the GitHub repo, so they show once pushed). Nothing is shown while paused or stopped; it's sent only when the song, play / pause or the position changes (Discord takes 5 changes per 20 s). The title is the name of a Discord application: Settings > Discord activity... explains how to make one per service and takes their ids (Spotify optional: Discord shows Spotify listening by itself). A mode without an id shows nothing. Messages when Discord isn't running or refuses the id. Checked: the buttons on screen, "Discord isn't running" and a malformed id; the activity itself waits for your app ids (and Discord running).
 
 ## Done (shipped in 1.0.333)
 
