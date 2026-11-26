@@ -1,7 +1,7 @@
 # Soranix
 
-**A classic-style desktop music player for Spotify Premium and YouTube Music on Windows, now also on Mac and Linux (test builds).**
-Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, synced lyrics, playlists that mix Spotify and YouTube Music songs, and a design built around one goal: use as few Spotify requests as possible, so you don't hit Spotify's cooldowns.
+**A classic-style desktop music player for Spotify Premium, YouTube Music and SoundCloud on Windows, now also on Mac and Linux (test builds).**
+Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, synced lyrics, playlists that mix songs from all three services, a Discord "Listening to" activity, and a design built around one goal: use as few Spotify requests as possible, so you don't hit Spotify's cooldowns.
 
 **Spotify mode** (green):
 
@@ -11,11 +11,15 @@ Skinned, dockable windows, a real playlist editor, MilkDrop-style visuals, synce
 
 ![Soranix in YouTube Music mode: the same windows in red, with a YouTube Music search open in the library](docs/screenshots/youtube-music.webp)
 
+**SoundCloud mode** (orange):
+
+<p align="center"><img src="docs/screenshots/soundcloud-player.png" alt="The Soranix player in SoundCloud orange, playing a SoundCloud song" width="440"> <img src="docs/screenshots/soundcloud-discover.png" alt="SoundCloud's Discover sections as a grid of covers in the Soranix library" width="430"></p>
+
 **Mixed playlist:** Spotify songs in green, YouTube Music songs in red, one after the other.
 
 <p align="center"><img src="docs/screenshots/mixed-playlist.png" alt="The playlist window with two Spotify songs in green and two YouTube Music songs in red" width="600"></p>
 
-> Unofficial, fan-made project. Not made, endorsed or supported by Spotify or YouTube. "Spotify" is a trademark of Spotify AB; "YouTube Music" is a trademark of Google LLC.
+> Unofficial, fan-made project. Not made, endorsed or supported by Spotify, YouTube, SoundCloud or Discord. "Spotify" is a trademark of Spotify AB; "YouTube Music" is a trademark of Google LLC; "SoundCloud" is a trademark of SoundCloud Global Limited & Co. KG; "Discord" is a trademark of Discord Inc.
 
 ## Download
 
@@ -88,6 +92,8 @@ Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
 
 **YouTube Music needs no setup:** pick **YouTube Music** when Soranix starts (or click the logo on the player to switch). Sign in with your Google account from the library to get your Liked music and playlists; searching and Discover work without signing in.
 
+**SoundCloud needs no setup either:** pick **SoundCloud**; searching, Discover and playing work right away. For your Likes and playlists, use **Sign in with authorized token** in the library (SoundCloud refuses its own sign-in inside apps): open soundcloud.com in Firefox or Chrome, signed in, press F12 and copy the value of the `oauth_token` cookie (Firefox: Storage > Cookies; Chrome: Application > Cookies), then paste it into Soranix. It stays on your PC, is only sent to SoundCloud, and lasts about a day; Log out removes it.
+
 ## Features
 
 **Player and windows**
@@ -113,9 +119,22 @@ Needs **Spotify Premium** (Spotify's rule for playback in third-party apps).
 - Always the audio version of a song; **Video** in Now Playing shows the music video instead of the cover.
 - Only the service you use runs, so YouTube Music mode never sends Spotify a request.
 
+**SoundCloud (in test)**
+- A third service, with the skin in SoundCloud orange. Same windows and controls as the other two.
+- Search with Everything / Tracks / People / Albums / Playlists, Discover (SoundCloud's own sections as a grid of covers), your Likes and playlists.
+- Right-click a song to like it or add it to one of your SoundCloud playlists; right-click an album, artist or playlist to play, queue or add it without opening it.
+- Songs only on SoundCloud Go+ are marked "(Go+)" and skipped. If SoundCloud asks to check you're human, **Verify SoundCloud** appears in the library.
+
+**Artists (YouTube Music and SoundCloud)**
+- Clicking an artist opens the artist window with a Wikipedia bio, details and links (MusicBrainz), looked up by name.
+
+**Discord activity**
+- The Discord button (next to shuffle) shows **"Listening to YouTube Music"** or **"Listening to SoundCloud"** on your Discord profile, with the song, artist, cover and a progress bar. Nothing shows while paused.
+- One-time setup in **Settings > Discord activity...**: make a Discord application per service in Discord's Developer Portal (named "YouTube Music" / "SoundCloud", which is what the title shows) and paste its Application ID. For Spotify, Discord already shows your listening by itself when Spotify is connected in Discord.
+
 **Mixed playlists**
-- The playlist window shows each song in its service's colour: Spotify green, YouTube Music red. Drag songs in from the library or Discover.
-- **MY LISTS** (next to LIST OPTS): your own lists, saved on your PC, with Spotify and YouTube Music songs side by side.
+- The playlist window shows each song in its service's colour: Spotify green, YouTube Music red, SoundCloud orange. Drag songs in from the library or Discover.
+- **MY LISTS** (next to LIST OPTS): your own lists, saved on your PC, with songs from all three services side by side.
 - When the next song is from the other service, Soranix switches over by itself, usually in under a second. Your open windows stay open.
 
 **Windows integration**
@@ -167,6 +186,8 @@ Saved copies take very little space (well under 1 MB for a typical library). Any
 - The visualizers analyse your PC's sound output locally. Nothing is recorded or sent anywhere.
 - Outside Spotify, Soranix only contacts public music databases: LRCLIB (lyrics), MusicBrainz and Wikipedia (artist info) and Deezer (related artists). It sends them song or artist names only.
 - In YouTube Music mode, Soranix plays through YouTube Music's own website in a hidden window, signed in with your Google account (if you sign in). Lyrics there also come from a public lyrics service, looked up by the song's YouTube ID.
+- In SoundCloud mode, Soranix asks SoundCloud's web API itself (with the public client ID SoundCloud's website uses) and plays SoundCloud's own stream links. Your SoundCloud token, if you add one, is kept on your PC and only sent to SoundCloud.
+- The Discord activity is only sent to the Discord app on your PC (its local connection), and only while it's on and something plays.
 
 ## Building from source
 
@@ -196,7 +217,7 @@ npx electron-builder@26.18.0 --mac     # or --linux; files land in dist/
 | `main.js` | Electron main process: windows, the built-in local server on `127.0.0.1:8888`, taskbar buttons |
 | `preload.js` | The bridge between the page and Windows |
 | `app.js` | The player: Spotify login (PKCE), playback, library, request queue, saved copies |
-| `ytm.js` | YouTube Music mode: service picker, red theme, library, search, Discover, playback |
+| `ytm.js` | YouTube Music and SoundCloud modes: service picker, colour themes, library, search, Discover, playback (SoundCloud streams via hls.js in `vendor/`) |
 | `ytm-bridge.js`, `ytm-preload.js` | Run inside the hidden YouTube Music window: player control, YouTube Music's own API, ad removal |
 | `index.html`, `style.css` | Windows and theme |
 | `helpers/balance.cs` | The small Windows helper for left/right balance |
